@@ -1881,7 +1881,9 @@ void setup()
   delay(10);
   
 #ifdef GSM_MQTT_TCP
-  MQTT_client.setServer(MQTT_brokerURL, 1883);
+  //MQTT_client.setServer(MQTT_brokerURL, 1883);
+  //MQTT_client.setCallback(MQTT_callback);
+  MQTT_client.setServer("dashboard.wisense.in", 1883);
   MQTT_client.setCallback(MQTT_callback);
 #endif
 
@@ -2016,7 +2018,7 @@ void loop()
        *  > false - connection failed
        *  > true - connection succeeded
        */
-      boolean status = MQTT_client.connect("GsmClientTest");         // clientId
+      boolean status = MQTT_client.connect("GsmClientTest","p0lsPBWqHD2AWhmKUlEu","NULL");         // clientId
       if (status == false) 
       {
           DBG("Failed to setup MQTT connection !!! ");
@@ -2255,7 +2257,8 @@ void loop()
        *   
        *   publish( ) is obviously a blocking call.
        */
-      boolean rc = MQTT_client.publish("Topic/test", GW_jsonMsg);
+      //boolean rc = MQTT_client.publish("Topic/test", GW_jsonMsg);
+      boolean rc = MQTT_client.publish("v1/devices/me/telemetry",GW_jsonMsg);
       MQTT_stats.pubCnt ++;
       if (rc == false)
       {
