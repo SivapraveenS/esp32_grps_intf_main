@@ -99,6 +99,7 @@ char GW_jsonMsg[1024];
 #ifdef GSM_MQTT_TCP         
 #include <PubSubClient.h>
 const char* MQTT_brokerURL = "broker.hivemq.com";         // MQTT broker
+//const char* MQTT_brokerURL = "dashboard.wisense.in";
 const char* MQTT_topicLed = "GsmClientTest/led";
 const char* MQTT_topicInit = "GsmClientTest/init";
 const char* MQTT_topicLedStatus = "GsmClientTest/ledStatus";
@@ -135,6 +136,8 @@ typedef struct
   uint32_t pubFlrConnUpCnt;
   uint32_t pubFlrConnDownCnt;
 } MQTT_stats_t;
+
+
 
 uint32_t GW_txToCloudPendCnt = 10;
 
@@ -506,7 +509,6 @@ void GW_sendMergedDataEvtToCloudJson(void)
 {
   Serial.printf("\n Node Data receives Completely, Proceeding JSON \n");
   //add the node_process_sts statements inside the function and call in main or after processing of data completes[processing of one complete node data]
- 
 }
 
 #endif
@@ -1620,8 +1622,8 @@ void COORD_IF_procNodeMsg(uint8_t *buff_p, int msgPyldLen)
    }
 
 #ifdef EVENT_FMT_TYPE_MERGED_DATA_JSON
-    //GW_sendMergedDataEvtToCloudJson();
     node_process_sts = 1;
+    //GW_sendMergedDataEvtToCloudJson();
     merge_count=0;
 #endif
    return;
@@ -1881,14 +1883,29 @@ void setup()
   delay(10);
   
 #ifdef GSM_MQTT_TCP
-  //MQTT_client.setServer(MQTT_brokerURL, 1883);
-  //MQTT_client.setCallback(MQTT_callback);
-  MQTT_client.setServer("dashboard.wisense.in", 1883);
+  MQTT_client.setServer(MQTT_brokerURL, 1883);
   MQTT_client.setCallback(MQTT_callback);
+  //MQTT_client.setServer("dashboard.wisense.in", 1883);
+  //MQTT_client.setCallback(MQTT_callback);
 #endif
 
   DBG("Setup Complete :-)");
 }
+
+boolean mqttConnect(char* user, char* pass)
+{
+    boolean status;
+    status = MQTT_client.connect("GsmClient",user,pass);  
+    //client.connect("GsmClient", user , pass);
+    int sts = 0;
+    while(!MQTT_client.connected() && sts<3)
+    {
+      sts++;
+      status = MQTT_client.connect("GsmClient", user , pass);
+    }
+    return status;
+}
+
 
 void loop() 
 {  
@@ -2004,6 +2021,7 @@ void loop()
    * This method allows your code to quickly determine whether an mqttclient 
    * object is currently connected to an MQTT broker:
    */
+#if 1
   if (!MQTT_client.connected())
   {
       DBG("Establishing MQTT connection to ", MQTT_brokerURL);
@@ -2018,7 +2036,7 @@ void loop()
        *  > false - connection failed
        *  > true - connection succeeded
        */
-      boolean status = MQTT_client.connect("GsmClientTest","p0lsPBWqHD2AWhmKUlEu","NULL");         // clientId
+      boolean status = MQTT_client.connect("GsmClient","NULL","NULL");         // clientId
       if (status == false) 
       {
           DBG("Failed to setup MQTT connection !!! ");
@@ -2036,6 +2054,7 @@ void loop()
   {
     GSM_CLOUD_CNT_STS = true;
   }
+#endif
 
   //DBG("Pending Tx Cnt: ", GW_txToCloudPendCnt); //commented
 
@@ -2075,10 +2094,13 @@ void loop()
 
  //if (GW_txToCloudPendCnt > 0)
  // {
- 
+
+ //once the complete node data received...
  if(node_process_sts)        //once the data received it will be 1/true, once process completes need to make zero/false
 {
+  node_process_sts=0;
   Serial.printf("\nPacket Received... \n");
+ /*
   if(MQTT_client.connected())
   {
     GSM_CLOUD_CNT_STS = true;
@@ -2089,9 +2111,11 @@ void loop()
     GSM_CLOUD_CNT_STS = false;
     Serial.printf("\nMQTT Connect State: Not-Connected\n");
   }
-  
+  */  
   if(GSM_CLOUD_CNT_STS == true && GSM_CNT_STS == true)    //checking both network/GPRS & cloud
   {
+  //if(GSM_CNT_STS == true)
+  //{
          Serial.printf("\nProceeding with JSON\n");
          Serial.printf("\n\n");
          int snsrId_count =4;
@@ -2166,7 +2190,7 @@ void loop()
                 sm_lvl = snsrDataBuff[sm_lvl_lct]; 
                 sm_lvl = map(sm_lvl, 0, 3000, 0, 100);    //adc value range from 0 to 3000   
             }  
-            //root["Name"] = GW_devName;
+            root["Name"] = GW_devName;
             root["MacId"] = GW_macBuff;
             root["RSSI"] = node_rssi;
             root["LQI"] = node_lqi;
@@ -2213,11 +2237,196 @@ void loop()
             Serial.printf("\nComplete JSON MSG: ");
             Serial.printf(GW_jsonMsg);
             Serial.printf("\n");
+
+      
+#if 1
+      // ArduinoJson 5
+      root.printTo(GW_jsonMsg);
+#else     
+      /*
+       * With ArduinoJson 6, you call the function serializeJson() and pass 
+       * the JsonArray, JsonObject, or the JsonDocument.
+       */
+      serializeJson(jsonDoc, GW_jsonMsg);
+#endif
+      /*
+       * publish( ) returns
+       *   > false - publish failed, either connection lost or message too large
+       *   > true - publish succeeded
+       *   
+       *   publish( ) is obviously a blocking call.
+       */
+//common USN,PWD start
+
+          //boolean status = mqttConnect("NULL","NULL");
+          if(MQTT_client.connected())
+          {
+            GSM_CLOUD_CNT_STS = true;
+            Serial.printf("\nMQTT Connect State: Connected\n");
+          }
+          else
+          {
+            GSM_CLOUD_CNT_STS = false;
+            Serial.printf("\nMQTT Connect State: Not-Connected\n");
+          }
+             boolean rc = MQTT_client.publish("v1/devices/me/telemetry",GW_jsonMsg);
+             MQTT_stats.pubCnt ++;
+            if (rc == false)
+            {
+                MQTT_stats.pubFlrCnt ++;
+                DBG("MQTT publish failed !!!, cnt: ", MQTT_stats.pubFlrCnt);
+                if (MQTT_client.connected())
+                {
+                  DBG("MQTT publish failed but MQTT conn is still up");
+                  MQTT_stats.pubFlrConnUpCnt ++;
+                }
+             else
+             {
+                DBG("MQTT publish failed and MQTT conn is down");
+                MQTT_stats.pubFlrConnDownCnt ++;
+             }
+            }
+            else
+            {
+              MQTT_stats.pubSuccessCnt ++;
+              DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
+              Serial.printf("\n**********************JSON Publish Success****************\n");
+             }       
+             Serial.printf("\n\n\n");   
+             //MQTT_client.disconnect();
+
+// common USN,PWD end       
+
+#if 0
+      if(strcmp(GW_macBuff, "fe:0d:4a:46") == 0)
+      {
+        Serial.printf("\n1st sensor\n");
+          boolean status = mqttConnect("p0lsPBWqHD2AWhmKUlEu","NULL");
+          if(MQTT_client.connected())
+          {
+            GSM_CLOUD_CNT_STS = true;
+            Serial.printf("\nMQTT Connect State: Connected\n");
+          }
+          else
+          {
+            GSM_CLOUD_CNT_STS = false;
+            Serial.printf("\nMQTT Connect State: Not-Connected\n");
+          }
+          /*
+          if(status == false)
+          {
+            Serial.printf("\nMQTT Connect: failed...\n");
+          }
+          else
+          {
+            Serial.printf("\nMQTT Connect: Success...\n");  
+          }
+          */
+
+
+             boolean rc = MQTT_client.publish("v1/devices/me/telemetry",GW_jsonMsg);
+             MQTT_stats.pubCnt ++;
+            if (rc == false)
+            {
+                MQTT_stats.pubFlrCnt ++;
+                DBG("MQTT publish failed !!!, cnt: ", MQTT_stats.pubFlrCnt);
+                if (MQTT_client.connected())
+                {
+                  DBG("MQTT publish failed but MQTT conn is still up");
+                  MQTT_stats.pubFlrConnUpCnt ++;
+                }
+             else
+             {
+                DBG("MQTT publish failed and MQTT conn is down");
+                MQTT_stats.pubFlrConnDownCnt ++;
+             }
+            }
+            else
+            {
+              MQTT_stats.pubSuccessCnt ++;
+              DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
+              Serial.printf("\n**********************JSON Publish Success****************\n");
+             }       
+             Serial.printf("\n\n\n");   
+             MQTT_client.disconnect();
+        }
+
+        //2nd sensor
+         if(strcmp(GW_macBuff, "fe:0d:5f:7c") == 0)
+        {
+          Serial.printf("\n2nd sensor <%s>\n",GW_macBuff);
+          boolean status = mqttConnect("st8T3pTKQ2LUBWBhCrzk","NULL");
+          if(MQTT_client.connected())
+          {
+            GSM_CLOUD_CNT_STS = true;
+            Serial.printf("\nMQTT Connect State: Connected\n");
+          }
+          else
+          {
+            GSM_CLOUD_CNT_STS = false;
+            Serial.printf("\nMQTT Connect State: Not-Connected\n");
+          }
+          /*
+          if(status == false)
+          {
+            Serial.printf("\nMQTT Connect: failed...\n");
+          }
+          else
+          {
+            Serial.printf("\nMQTT Connect: Success...\n");  
+          }
+          */
+
+             boolean rc = MQTT_client.publish("v1/devices/me/telemetry",GW_jsonMsg);
+             MQTT_stats.pubCnt ++;
+            if (rc == false)
+            {
+                MQTT_stats.pubFlrCnt ++;
+                DBG("MQTT publish failed !!!, cnt: ", MQTT_stats.pubFlrCnt);
+                if (MQTT_client.connected())
+                {
+                  DBG("MQTT publish failed but MQTT conn is still up");
+                  MQTT_stats.pubFlrConnUpCnt ++;
+                }
+             else
+             {
+                DBG("MQTT publish failed and MQTT conn is down");
+                MQTT_stats.pubFlrConnDownCnt ++;
+             }
+            }
+            else
+            {
+              MQTT_stats.pubSuccessCnt ++;
+              DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
+              Serial.printf("\n**********************JSON Publish Success****************\n");
+             }       
+             Serial.printf("\n\n\n");   
+             MQTT_client.disconnect();
+        }
+#endif
+
+
+
+}
+else
+{
+  Serial.printf("\ndrooping payload \n");
+  if(GSM_CNT_STS == false)
+  {
+    Serial.printf("\nGSM Network/gprs connection not established..\n");
+  }
+  if(GSM_CLOUD_CNT_STS == false)
+  {
+    Serial.printf("\nCloud/mqtt connection not established...\n");
+  }
+}
+
             int i;
             for(i=0;i<=8;i++)
             {
               snsrIdStore[i] = 0x0;
             }
+   
             /*
             snsrIdStore[0] = 0x0;
             snsrIdStore[1] = 0x0;
@@ -2237,73 +2446,18 @@ void loop()
             snsrDataBuff[4] = {0};
             */
             
-            merge_count=0;                                          //clearing merge count to set to start first          
-            node_process_sts= 0;
-      
-#if 1
-      // ArduinoJson 5
-      root.printTo(GW_jsonMsg);
-#else     
-      /*
-       * With ArduinoJson 6, you call the function serializeJson() and pass 
-       * the JsonArray, JsonObject, or the JsonDocument.
-       */
-      serializeJson(jsonDoc, GW_jsonMsg);
-#endif
-      /*
-       * publish( ) returns
-       *   > false - publish failed, either connection lost or message too large
-       *   > true - publish succeeded
-       *   
-       *   publish( ) is obviously a blocking call.
-       */
-      //boolean rc = MQTT_client.publish("Topic/test", GW_jsonMsg);
-      boolean rc = MQTT_client.publish("v1/devices/me/telemetry",GW_jsonMsg);
-      MQTT_stats.pubCnt ++;
-      if (rc == false)
-      {
-          MQTT_stats.pubFlrCnt ++;
-
-          DBG("MQTT publish failed !!!, cnt: ", MQTT_stats.pubFlrCnt);
           
-          if (MQTT_client.connected())
-          {
-              DBG("MQTT publish failed but MQTT conn is still up");
-              MQTT_stats.pubFlrConnUpCnt ++;
-          }
-          else
-          {
-              DBG("MQTT publish failed and MQTT conn is down");
-              MQTT_stats.pubFlrConnDownCnt ++;
-          }
-      }
-      else
-      {
-          MQTT_stats.pubSuccessCnt ++;
-          DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
-          Serial.printf("\n**********************JSON Publish Success****************\n");
-      }       
-      Serial.printf("\n\n\n");
-}
-else
-{
-  Serial.printf("\ndrooping payload \n");
-  if(GSM_CNT_STS == false)
-  {
-    Serial.printf("\nGSM Network/gprs connection not established..\n");
-  }
-  if(GSM_CLOUD_CNT_STS == false)
-  {
-    Serial.printf("\nCloud/mqtt connection not established...\n");
-  }
-}
    GW_snsrDataBuff[0] = '\0';
    GW_snsrDataBuff_0[0] = '\0';
    GW_snsrDataBuff_1[0] = '\0';
    GW_snsrDataBuff_2[0] = '\0';
    GW_snsrDataBuff_3[0] = '\0';
    GW_snsrDataBuff_4[0] = '\0';
+            merge_count=0;                                          //clearing merge count to set to start first          
+            node_process_sts= 0;  
 }
+ 
+
 #endif
 
   //Serial.printf("\nLoop running forever....\n");
