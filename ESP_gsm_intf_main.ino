@@ -190,13 +190,24 @@ boolean MODEM_restarted = false;
 
 #define COORD_INTF_UART_DRIVER_BUFF_SIZE (1024 * 2)
 #define COORD_INTF_EVT_QUEUE_SIZE  2
+//queues
 static QueueHandle_t CoordIntf_evtQHndl;
+static QueueHandle_t Queue2;
+static QueueHandle_t Queue3;
+
 
 #define COORD_INTF_TASK_RX_MSG_BUFF_LEN  256
 #define COORD_INTF_TASK_RX_RAW_BUFF_LEN  256
 
 uint8_t COORD_INTF_taskRxRawBuff[COORD_INTF_TASK_RX_RAW_BUFF_LEN + 16];
 uint8_t COORD_INTF_taskRxMsgBuff[COORD_INTF_TASK_RX_MSG_BUFF_LEN + 16];
+
+struct uart_data_send
+    {
+        int readCnt_q=0;
+        uint8_t COORD_INTF_taskRxRawBuff_q[COORD_INTF_TASK_RX_RAW_BUFF_LEN + 16];
+    } uart_data_send_str;
+
 
 //configure UART's
 uart_config_t CoordIntf_uartConfigInfo = 
@@ -572,9 +583,45 @@ unsigned short GW_ntohs(unsigned char *buff_p)
 
    return temp;
  }
+// queue task test
+
+
+void CoordIntf_procCoordMsg(void *params_p)
+{
+ // struct uart_data_send *uart_data_rcvd_frmQ1; 
+  uint8_t rec_data_q2[272];
+  while (1)
+  {
+    DBG("Task 2 running...");
+     if (xQueueReceive(Queue2, (void *)&rec_data_q2, (portTickType)portMAX_DELAY)) 
+     {
+      DBG("Queue2 received...");
+     // DBG("\nReadcnt received <%d> \n",uart_data_rcvd_frmQ1->readCnt_q);
+     // DBG("\nReceived bytes...\n");
+     // for(int i=0;i<uart_data_rcvd_frmQ1->readCnt_q;i++)
+     // {
+     //   DBG(uart_data_rcvd_frmQ1->COORD_INTF_taskRxRawBuff_q[i]);
+     // }
+
+      for(int i=0;i<55;i++)
+      {
+        DBG("|",rec_data_q2[i]);
+      }
+      
+      //xQueueSend(Queue3,(void*)&rec_data_q2,(TickType_t)5);
+     }
+    vTaskDelay(10000/portTICK_PERIOD_MS); 
+  }   
+}
+
+
+
+// queue task test
+
+ 
  
 void COORD_IF_procNodeMsg(uint8_t *buff_p, int msgPyldLen)
-{
+{ 
    int srcShortAddr, off = 0;
    unsigned int disMsgType;
    uint8_t *extAddr_p;
@@ -586,6 +633,7 @@ void COORD_IF_procNodeMsg(uint8_t *buff_p, int msgPyldLen)
                 + DIS_LPWMN_MSG_RSSI_LEN 
                 + DIS_LPWMN_MSG_CORR_LQI_LEN)
        return;
+   Serial.printf("\nProcesing complete msg... done\n");
        
    srcShortAddr = buff_p[off];
    srcShortAddr = (srcShortAddr << 8) | buff_p[off + 1];
@@ -1640,8 +1688,12 @@ void COORD_INTF_procRcvdFrame(void)
    {
        case LPWMN_GW_MSG_TYPE_RELAY_FROM_NODE:
             {
-               COORD_IF_procNodeMsg(COORD_INTF_taskRxMsgBuff + COORD_INTF_FRAME_HDR_LEN,
+              Serial.printf("\nProcess Node msg...\n");
+              COORD_IF_procNodeMsg(COORD_INTF_taskRxMsgBuff + COORD_INTF_FRAME_HDR_LEN,
                                     COORD_INTF_rcvdFramePyldLen);
+            //  xQueueSend(Queue2,(void*)&COORD_INTF_taskRxMsgBuff,(TickType_t)5);
+           
+            
             }
             break;    
 
@@ -1679,6 +1731,7 @@ int COORD_IF_procOneMsg(uint8_t *rawBuff_p, const int rxByteCnt)
 {
    int currMsgBytesTotalRcvdCnt = COORD_INTF_rxMsgOff + rxByteCnt,
        consumedCnt = 0;
+
 
    Serial.printf("POM En rxBC:%d c-rxMO:%d FPL:%d cMBTRC:%d \n", 
                  rxByteCnt, COORD_INTF_rxMsgOff, 
@@ -1770,7 +1823,6 @@ void COORD_IF_procRxBytes(int rxByteCnt)
 {
    int totConsumedCnt = 0;
    Serial.printf("PRB rBC:%d\n", rxByteCnt);
-   
    while (rxByteCnt > 0)
    {
       Serial.printf("PRB L1 rBC:%d tCC:%d \n", rxByteCnt, totConsumedCnt);
@@ -1787,6 +1839,7 @@ void COORD_IF_procRxBytes(int rxByteCnt)
           // Should never happen - blink the LEDs to indicate a bug !!
           for (;;);
       }
+     
    }
    
    return;
@@ -1821,8 +1874,21 @@ static void CoordIntf_uartEvtTask(void *params_p)
                                                  COORD_INTF_taskRxRawBuff,
                                                  toReadCnt, 100);
                        // <TODO> Error check readCnt
+                       uart_data_send_str.readCnt_q = readCnt;
+                       for(int i=0;i<readCnt;i++)
+                       {
+                        Serial.printf("%x ",COORD_INTF_taskRxRawBuff[i]);
+                        uart_data_send_str.COORD_INTF_taskRxRawBuff_q[i] = COORD_INTF_taskRxRawBuff[i];
+                       }
+                      Serial.printf("\nAfter copying...\n");
+                       for(int i=0;i<readCnt;i++)
+                       {
+                        Serial.printf("%x ",uart_data_send_str.COORD_INTF_taskRxRawBuff_q[i]);
+                       }
+                        Serial.printf("\n");
+                        xQueueSend(Queue2,(void*)&COORD_INTF_taskRxRawBuff,(TickType_t)5);
+                      // COORD_IF_procRxBytes(readCnt);
                        
-                       COORD_IF_procRxBytes(readCnt);
                     } while (1);
                  }
                  break;
@@ -1874,9 +1940,23 @@ void setup()
                       COORD_INTF_EVT_QUEUE_SIZE,  // event queue size 
                       &CoordIntf_evtQHndl,  // event queue handle
                       0);
- 
+
+  
+    Queue2 = xQueueCreate(100,sizeof(uart_data_send_str));
+    Queue3 = xQueueCreate(100,sizeof(COORD_INTF_taskRxRawBuff)); 
+    if(Queue2 == NULL)
+    {
+      Serial.printf("\nQueue2 not created...\n"); 
+    }
+    if(Queue3 == NULL)
+    {
+      Serial.printf("\nQueue2 not created...\n");
+    }
   //Create a task to handler UART event from ISR
   xTaskCreate(CoordIntf_uartEvtTask, "COORD_INTF_UART_ISR_ROUTINE", 4000, NULL, 12, NULL);
+
+  xTaskCreate(CoordIntf_procCoordMsg,"COORD_INTF_PROC_COORD_MSG", 10000, NULL, 12, NULL);
+  
     
   // Configure serial port connected to the GSM Modem
   GSM_serialObj.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
@@ -2015,6 +2095,8 @@ void loop()
   }
 #endif
 
+
+
 #if GSM_MQTT_TCP
   /*
    * MQTT.connected( )
@@ -2091,6 +2173,8 @@ void loop()
     GSM_CNT_STS = true;
     //Serial.printf("\n Network and GPRS connection Successfully...\n");
   }
+
+
 
  //if (GW_txToCloudPendCnt > 0)
  // {
