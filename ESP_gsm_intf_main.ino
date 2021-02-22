@@ -202,11 +202,11 @@ static QueueHandle_t Queue3;
 uint8_t COORD_INTF_taskRxRawBuff[COORD_INTF_TASK_RX_RAW_BUFF_LEN + 16];
 uint8_t COORD_INTF_taskRxMsgBuff[COORD_INTF_TASK_RX_MSG_BUFF_LEN + 16];
 
-struct uart_data_send
-    {
-        int readCnt_q=0;
-        uint8_t COORD_INTF_taskRxRawBuff_q[COORD_INTF_TASK_RX_RAW_BUFF_LEN + 16];
-    } uart_data_send_str;
+struct COORD_DATA_RCVD_PCKT
+{
+    int pyldLenCnt_que=0;
+    uint8_t COORD_INTF_taskRxRawBuff_que[COORD_INTF_TASK_RX_RAW_BUFF_LEN + 16];
+}COORD_DATA_RCVD_PCKT_01;
 
 
 //configure UART's
@@ -325,9 +325,6 @@ boolean COORD_INTF_checkForHdr(uint8_t *hdr_p)
    return rc;
 }
 
-/* cloud functions  */
-//1
-#ifdef EVENT_FMT_TYPE_MERGED_DATA_JSON
 /*
  ********************************************************************
  *
@@ -374,29 +371,21 @@ void GW_appendToEventBuffer(unsigned char *extAddr_p,
     int strLen = strlen(GW_snsrDataBuff);
     if(merge_count==0)
     {
-      Serial.printf("\nmerge_count-0 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-        merge_store[merge_count] = strLen;
         snsrIdStore[merge_count] = snsrId;
         snsrDataBuff[merge_count]= valF;
     }
     if(merge_count==1)
     {
-      Serial.printf("\nmerge_count-1 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-        merge_store[merge_count] = strLen;
         snsrIdStore[merge_count] = snsrId,
         snsrDataBuff[merge_count]= valF;
     }
     if(merge_count==2)
     {
-      Serial.printf("\nmerge_count-2 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-        merge_store[merge_count] = strLen;   
         snsrIdStore[merge_count] = snsrId;
         snsrDataBuff[merge_count]= valF;
     }
     if(merge_count==3)
     {
-      Serial.printf("\nmerge_count-3 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-        merge_store[merge_count] = strLen;
         snsrIdStore[merge_count] = snsrId;
         snsrDataBuff[merge_count]= valF;
    }
@@ -410,36 +399,26 @@ void GW_appendToEventBuffer(unsigned char *extAddr_p,
    */
    if(merge_count==4)
    {
-       Serial.printf("\nmerge_count-4 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-       merge_store[merge_count] = strLen;
        snsrIdStore[merge_count] = snsrId;
        snsrDataBuff[merge_count] = valF;
    }
     if(merge_count==5)
    {
-       Serial.printf("\nmerge_count-5 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-       merge_store[merge_count] = strLen;
        snsrIdStore[merge_count] = snsrId;
        snsrDataBuff[merge_count] = valF;
    }
    if(merge_count==6)
    {
-       Serial.printf("\nmerge_count-6 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-       merge_store[merge_count] = strLen;
        snsrIdStore[merge_count] = snsrId;
        snsrDataBuff[merge_count] = valF;
    }
    if(merge_count==7)
    {
-       Serial.printf("\nmerge_count-7 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-       merge_store[merge_count] = strLen;
        snsrIdStore[merge_count] = snsrId;
        snsrDataBuff[merge_count] = valF;
    }
    if(merge_count==8)
    {
-       Serial.printf("\nmerge_count-8 snsrId <0x%x> and valF <%.2f>\n",snsrId,valF);
-       merge_store[merge_count] = strLen;
        snsrIdStore[merge_count] = snsrId;
        snsrDataBuff[merge_count] = valF;
    }
@@ -459,28 +438,8 @@ void GW_appendToEventBuffer(unsigned char *extAddr_p,
     GW_DataBufLen = GW_DataBufLen + strLen; 
     sprintf(GW_snsrDataBuff + strLen,  "__S%d_V%.3f_U%s", snsrId, valF, unit_p);                         //complete merged string it will store (2_t)
 }
-/*
- ********************************************************************
- *
- *
- *
- ********************************************************************
- */
-void GW_appendIntToEventBufferJson(unsigned char *extAddr_p,
-                               int snsrId,
-                               char *unit_p,
-                               int valI)
-{
-   int strLen = strlen(GW_snsrDataBuff);
-   
-   if (strLen == 0)
-   { 
-       strLen = sprintf(GW_snsrDataBuff, "ID_%02x%02x%02x%02x",            
-                        extAddr_p[4], extAddr_p[5], extAddr_p[6], extAddr_p[7]);
-   }
-   sprintf(GW_snsrDataBuff + strLen,  "__S%d_V%d_U%s", snsrId, valI, unit_p);
-}
 
+ 
 /*
  ********************************************************************
  *
@@ -489,11 +448,9 @@ void GW_appendIntToEventBufferJson(unsigned char *extAddr_p,
  *
  ********************************************************************
  */
-
 
 void GW_appendToJsonBuff()
 {
-  
         int jsonMsgLen;
          char* jsonMsgPtr_p;
          Serial.printf("\nPacket Received... \n");
@@ -582,8 +539,7 @@ void GW_appendToJsonBuff()
           }
           free(jsonMsgPtr_p);
           jsonMsgPtr_p = NULL; 
-          
-          
+                    
    GW_snsrDataBuff[0] = '\0';
    GW_snsrDataBuff_0[0] = '\0';
    GW_snsrDataBuff_1[0] = '\0';
@@ -592,14 +548,6 @@ void GW_appendToJsonBuff()
    merge_count=0;   
 }
 
-void GW_sendMergedDataEvtToCloudJson(void)
-{
-  Serial.printf("\n Node Data receives Completely, Proceeding JSON \n");
-  //add the node_process_sts statements inside the function and call in main or after processing of data completes[processing of one complete node data]
-}
-
-#endif
-
 unsigned short GW_ntohs(unsigned char *buff_p)
 {
    short u16Val = *buff_p;
@@ -607,34 +555,29 @@ unsigned short GW_ntohs(unsigned char *buff_p)
    return u16Val;
 }
 
-// queue task test
-
-int rcvdFramePyldLen_temp = 45;         //COORD_INTF_rcvdFramePyldLen, need to pass in struct with data xQueueSend
-
 void CoordIntf_procCoordMsg(void *params_p)
 {
   uint8_t rec_data_q2[272];
+  struct COORD_DATA_RCVD_PCKT COORD_DATA_RCVD_PCKT_02;
   while (1)
   {
-    DBG("Task 2 running...");
-     if (xQueueReceive(Queue2, (void *)&rec_data_q2, (portTickType)portMAX_DELAY)) 
-     {
+      DBG("Task 2 running...");
+     if (xQueueReceive(Queue2, (void *)&COORD_DATA_RCVD_PCKT_02, (portTickType)portMAX_DELAY)) 
+     { 
       DBG("Queue2 received...");
+      /*
       DBG("Received data");
-      for(int i=0;i<55;i++)
+      Serial.printf("\nReceived Data Len: <%d>\n",COORD_DATA_RCVD_PCKT_02.pyldLenCnt_que);
+      for(int i=0;i<COORD_DATA_RCVD_PCKT_02.pyldLenCnt_que;i++)
       {
-        DBG(rec_data_q2[i]);
-        Serial.printf("\n|<%d> <%x>|\n",rec_data_q2[i],rec_data_q2[i]);
+        Serial.printf("\n|<%d> <%x>|\n",COORD_DATA_RCVD_PCKT_02.COORD_INTF_taskRxRawBuff_que[i],COORD_DATA_RCVD_PCKT_02.COORD_INTF_taskRxRawBuff_que[i]);
       }
-      Serial.printf("\nCOORD_IF_procNodeMsg started in task- 2\n");
-      COORD_IF_procNodeMsg(rec_data_q2, rcvdFramePyldLen_temp);
+      */
+      COORD_IF_procNodeMsg(COORD_DATA_RCVD_PCKT_02.COORD_INTF_taskRxRawBuff_que, COORD_DATA_RCVD_PCKT_02.pyldLenCnt_que);
      }
     vTaskDelay(1000/portTICK_PERIOD_MS); 
   }   
 }
-
-
-// queue task test
 
 void COORD_IF_procNodeMsg(uint8_t *buff_p, int msgPyldLen)
 { 
@@ -1005,21 +948,26 @@ void COORD_INTF_procRcvdFrame(void)
    {
        case LPWMN_GW_MSG_TYPE_RELAY_FROM_NODE:
             {
-              Serial.printf("\nProcess Node msg...\n");
-
-              Serial.printf("\nCoord frame hdr len <%d>\n",COORD_INTF_FRAME_HDR_LEN);                      
-              Serial.printf("\n Node msg REF:");
-              for(int i=0;i<55;i++)
-              {
-                Serial.printf("|<%d> <%x>|\n",COORD_INTF_taskRxMsgBuff[i],COORD_INTF_taskRxMsgBuff[i]);                      
-              }
-              Serial.printf("\ncombined level: ");
-              Serial.printf("|<%d><%x>  |",COORD_INTF_taskRxMsgBuff + COORD_INTF_FRAME_HDR_LEN,COORD_INTF_taskRxMsgBuff + COORD_INTF_FRAME_HDR_LEN);
-              Serial.printf("\n2nd argu COORD_INTF_rcvdFramePyldLen <%d>\n",COORD_INTF_rcvdFramePyldLen);
              // COORD_IF_procNodeMsg(COORD_INTF_taskRxMsgBuff + COORD_INTF_FRAME_HDR_LEN,
              //                       COORD_INTF_rcvdFramePyldLen);
-              
-              xQueueSend(Queue2,(void*)&COORD_INTF_taskRxMsgBuff+COORD_INTF_FRAME_HDR_LEN,(TickType_t)5);          
+             
+              COORD_DATA_RCVD_PCKT_01.pyldLenCnt_que = COORD_INTF_rcvdFramePyldLen;
+              int i_temp;
+              for(int i=0;i<COORD_INTF_rcvdFramePyldLen;i++)
+              {
+                i_temp = i+COORD_INTF_FRAME_HDR_LEN;
+                COORD_DATA_RCVD_PCKT_01.COORD_INTF_taskRxRawBuff_que[i] = COORD_INTF_taskRxMsgBuff[i_temp];
+              }          
+              //if(xQueueSend(Queue2,(void*)&COORD_INTF_taskRxMsgBuff+COORD_INTF_FRAME_HDR_LEN,(TickType_t)5)==pdPASS)  
+              //{
+              if(xQueueSend(Queue2,(void*)&COORD_DATA_RCVD_PCKT_01,(TickType_t)5)==pdPASS)  
+              {
+                Serial.printf("\nData Enqueued in Q2- success\n"); 
+              }
+              else
+              {
+                Serial.printf("\n No Queue space in Queue2...\n");
+              }        
             }
             break;    
 
@@ -1253,8 +1201,8 @@ void setup()
                       &CoordIntf_evtQHndl,  // event queue handle
                       0);
   
-    Queue2 = xQueueCreate(10,sizeof(uart_data_send_str));
-    Queue3 = xQueueCreate(10,sizeof(uart_data_send_str)); 
+    Queue2 = xQueueCreate(10,sizeof(COORD_DATA_RCVD_PCKT_01));
+    Queue3 = xQueueCreate(10,sizeof(char)*1024); 
     if(Queue2 == NULL)
     {
       Serial.printf("\nQueue2 not created...\n"); 
@@ -1266,6 +1214,7 @@ void setup()
   //Create a task to handler UART event from ISR
   xTaskCreate(CoordIntf_uartEvtTask, "COORD_INTF_UART_ISR_ROUTINE", 4000, NULL, 12, NULL);
 
+  //task2
   xTaskCreate(CoordIntf_procCoordMsg,"COORD_INTF_PROC_COORD_MSG", 10000, NULL, 12, NULL);
   
   // Configure serial port connected to the GSM Modem
@@ -1331,16 +1280,6 @@ void loop()
           MODEM_restarted = true;
       }
   }
-  /*
-#if TINY_GSM_TEST_GPRS
-  // Unlock your SIM card with a PIN if needed
-  if (GSM_PIN && modem.getSimStatus() != 3) 
-  {
-      modem.simUnlock(GSM_PIN);
-      // DBG("SimUnlock processing done...");
-  }
-#endif
-*/
 
   if (modem.isNetworkConnected() == false)
   {
@@ -1406,8 +1345,6 @@ void loop()
   }
 #endif
 
-
-
 #if GSM_MQTT_TCP
   /*
    * MQTT.connected( )
@@ -1448,10 +1385,6 @@ void loop()
     GSM_CLOUD_CNT_STS = true;
   }
 #endif
-
-  //DBG("Pending Tx Cnt: ", GW_txToCloudPendCnt); //commented
-
-  
 /*
 * Continously Monitoring the connect status of network and GPRS.
 * if connection was still up then status will be True, payload are ready to publish to cloud
@@ -1484,8 +1417,6 @@ void loop()
     GSM_CNT_STS = true;
     //Serial.printf("\n Network and GPRS connection Successfully...\n");
   }
-
-//task proceeds
 
 if(xQueueReceive(Queue3, &rcvdNodePyld, (portTickType)portMAX_DELAY))
 {
