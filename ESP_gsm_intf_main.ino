@@ -94,7 +94,7 @@ const char resource[] = "/TinyGSM/logo.txt";
 #include <ArduinoJson.h>
 
 
-char GW_jsonMsg[1024];
+//char GW_jsonMsg[1024];
 
 #ifdef GSM_MQTT_TCP         
 #include <PubSubClient.h>
@@ -158,7 +158,7 @@ bool GSM_CNT_STS = false,
      GSM_NETWRK_CNT_STS = false,
      GSM_GPRS_CNT_STS = false,
      GSM_CLOUD_CNT_STS = false;
-/* GSM_CNT_STS = Network & GPRS Connect STS, GSM_NETWRK_CNT_STS = Network Connect STS, GSM_GPRS_CNT_STS = GPRS Connect STS, GSM_CLOUD_CNT_STS = MQTT/Cloud Connect sts  */     
+
 #define LED_PIN 13
 
 int ledStatus = LOW;
@@ -358,16 +358,11 @@ char GW_snsrDataBuff_0[150]={'\0'},
 char GW_get_time[150]={'\0'};
 float snsrDataBuff[10]={0};
 
-/*  for every packet the node data valF respect to the unit_p will differ, remaining the macid= extAddr_p, snsrId will remain same if the data receive from one sensor node 
-    storing snsId's at specific rate: id[0] = node_voltage, id[1]=msp temp, id[2]=humdity, id[3]=temp ....n
-*/
-
 void GW_appendToEventBuffer(unsigned char *extAddr_p,
                             int snsrId,
                             char *unit_p,
                             float valF)
 {
-     Serial.printf("\nEntering GW_appendToEventBuffer -1 \n");
     int strLen = strlen(GW_snsrDataBuff);
     if(merge_count==0)
     {
@@ -402,26 +397,6 @@ void GW_appendToEventBuffer(unsigned char *extAddr_p,
        snsrIdStore[merge_count] = snsrId;
        snsrDataBuff[merge_count] = valF;
    }
-    if(merge_count==5)
-   {
-       snsrIdStore[merge_count] = snsrId;
-       snsrDataBuff[merge_count] = valF;
-   }
-   if(merge_count==6)
-   {
-       snsrIdStore[merge_count] = snsrId;
-       snsrDataBuff[merge_count] = valF;
-   }
-   if(merge_count==7)
-   {
-       snsrIdStore[merge_count] = snsrId;
-       snsrDataBuff[merge_count] = valF;
-   }
-   if(merge_count==8)
-   {
-       snsrIdStore[merge_count] = snsrId;
-       snsrDataBuff[merge_count] = valF;
-   }
 
    if(strLen == 0)
    { 
@@ -439,28 +414,7 @@ void GW_appendToEventBuffer(unsigned char *extAddr_p,
     sprintf(GW_snsrDataBuff + strLen,  "__S%d_V%.3f_U%s", snsrId, valF, unit_p);                         //complete merged string it will store (2_t)
 }
 
- 
-/*
- ********************************************************************
- *
- *
- *
- *
- ********************************************************************
- */
-
-void GW_appendToJsonBuff()
-{
-        int jsonMsgLen;
-         char* jsonMsgPtr_p;
-         Serial.printf("\nPacket Received... \n");
-         Serial.printf("\nProceeding with JSON\n");
-         Serial.printf("\n\n");
-         seq_nr++;   
-         /*spilting GW_snsrDataBuff into json file
-           GW_snsrDataBuff_0=Node_voltage,  GW_snsrDataBuff_1=msp_temp, GW_snsrDataBuff_2=R_Humidity, GW_snsrDataBuff_3=R_TEMP, GW_snsrDataBuff_4= *** 
-         */
-         char GW_jsonMsg[1024];
+char GW_jsonMsg[1024];
 #if 0
           // Arduinojson 5
           StaticJsonBuffer<1024> jsonBuffer;
@@ -469,8 +423,15 @@ void GW_appendToJsonBuff()
 //        Arduinojson 6
           DynamicJsonDocument jsonDoc(1024); 
           JsonObject root = jsonDoc.to<JsonObject>();
-#endif
-          
+#endif  
+
+void GW_appendToJsonBuff()
+{
+        int jsonMsgLen;
+         char* jsonMsgPtr_p;
+         Serial.printf("\nPacket Received... \n");
+         seq_nr++;   
+                 
           GW_snsrDataBuff[0] = '\0';
           GW_snsrDataBuff_0[0] = '\0';
           GW_snsrDataBuff_1[0] = '\0';
@@ -524,11 +485,10 @@ void GW_appendToJsonBuff()
             
           memcpy(jsonMsgPtr_p,GW_jsonMsg,jsonMsgLen);
           Serial.printf("\nThe jsonMsgLen <%d>\n",jsonMsgLen);  
-          Serial.printf("\nThe jsonMsgPtr_p:\n");
+          Serial.printf("\nThe jsonMsgPtr_p:");
           Serial.printf(jsonMsgPtr_p);  
           Serial.printf("\n");
-
-          //enqueue into Q3
+          
           if(xQueueSend(Queue3,(void*)jsonMsgPtr_p,(TickType_t)5)==pdPASS)
           {
             Serial.printf("\nData Enqueued in Q3- success\n"); 
@@ -561,7 +521,7 @@ void CoordIntf_procCoordMsg(void *params_p)
   struct COORD_DATA_RCVD_PCKT COORD_DATA_RCVD_PCKT_02;
   while (1)
   {
-      DBG("Task 2 running...");
+     DBG("Task 2 running...");
      if (xQueueReceive(Queue2, (void *)&COORD_DATA_RCVD_PCKT_02, (portTickType)portMAX_DELAY)) 
      { 
       DBG("Queue2 received...");
@@ -575,7 +535,7 @@ void CoordIntf_procCoordMsg(void *params_p)
       */
       COORD_IF_procNodeMsg(COORD_DATA_RCVD_PCKT_02.COORD_INTF_taskRxRawBuff_que, COORD_DATA_RCVD_PCKT_02.pyldLenCnt_que);
      }
-    vTaskDelay(1000/portTICK_PERIOD_MS); 
+    vTaskDelay(100/portTICK_PERIOD_MS); 
   }   
 }
 
@@ -930,9 +890,7 @@ void COORD_IF_procNodeMsg(uint8_t *buff_p, int msgPyldLen)
    }
 
 #ifdef EVENT_FMT_TYPE_MERGED_DATA_JSON
-    //node_process_sts = 1;
     GW_appendToJsonBuff();
-    //GW_sendMergedDataEvtToCloudJson();
     merge_count=0;
 #endif
    return;
@@ -958,8 +916,6 @@ void COORD_INTF_procRcvdFrame(void)
                 i_temp = i+COORD_INTF_FRAME_HDR_LEN;
                 COORD_DATA_RCVD_PCKT_01.COORD_INTF_taskRxRawBuff_que[i] = COORD_INTF_taskRxMsgBuff[i_temp];
               }          
-              //if(xQueueSend(Queue2,(void*)&COORD_INTF_taskRxMsgBuff+COORD_INTF_FRAME_HDR_LEN,(TickType_t)5)==pdPASS)  
-              //{
               if(xQueueSend(Queue2,(void*)&COORD_DATA_RCVD_PCKT_01,(TickType_t)5)==pdPASS)  
               {
                 Serial.printf("\nData Enqueued in Q2- success\n"); 
@@ -1443,8 +1399,21 @@ if(xQueueReceive(Queue3, &rcvdNodePyld, (portTickType)portMAX_DELAY))
           {
             GSM_CLOUD_CNT_STS = false;
             Serial.printf("\nMQTT Connect State: Not-Connected\n");
-          }
-             boolean rc = MQTT_client.publish("v1/devices/me/telemetry",rcvdNodePyld);
+            Serial.printf("\nRetrying MQTT Connection...\n"); 
+              boolean status = MQTT_client.connect("GsmClient","NULL","NULL");  
+              if(status == false)
+              {
+                GSM_CLOUD_CNT_STS = false;
+                DBG("Failed to setup MQTT connection !!! ");
+              }
+              else
+              {
+                DBG("MQTT Connection Established");
+                GSM_CLOUD_CNT_STS = true;
+                DBG("MQTT connection established :-) ");  
+              }
+            }
+             boolean rc = MQTT_client.publish("v1/devices/me/telemetry",rcvdNodePyld);             
              MQTT_stats.pubCnt ++;
             if (rc == false)
             {
@@ -1465,7 +1434,7 @@ if(xQueueReceive(Queue3, &rcvdNodePyld, (portTickType)portMAX_DELAY))
             {
               MQTT_stats.pubSuccessCnt ++;
               DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
-              Serial.printf("\n**********************JSON Publish Success****************\n");
+              Serial.printf("\n**********************MSG Published to Cloud - Success****************\n");
              }       
              Serial.printf("\n\n\n");   
              //MQTT_client.disconnect();      
