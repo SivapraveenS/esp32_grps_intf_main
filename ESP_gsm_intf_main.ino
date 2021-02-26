@@ -1,10 +1,8 @@
 #include "driver/uart.h"
-
 #include "coord_intf.h"
 #include "dis.h"
 #include "gw.h"
 #include "pltfrm.h"
-
 #define TINY_GSM_MODEM_SIM868
 
 /*
@@ -29,8 +27,6 @@
 #define SerialMon Serial
 
 // UART1
-// Set serial for AT commands (to the module)
-// Use Hardware Serial on Mega, Leonardo, Micro
 #define GSM_serialObj  Serial1
 #define GSM_RX_PIN  16 
 #define GSM_TX_PIN  17
@@ -93,18 +89,17 @@ const char resource[] = "/TinyGSM/logo.txt";
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-
 //char GW_jsonMsg[1024];
 
 #ifdef GSM_MQTT_TCP         
 #include <PubSubClient.h>
-const char* MQTT_brokerURL = "broker.hivemq.com";         // MQTT broker
-//const char* MQTT_brokerURL = "dashboard.wisense.in";
+const char* MQTT_brokerURL = "broker.hivemq.com";         
+const char* MQTT_brokerWsURL = "dashboard.wisense.in";   
 const char* MQTT_topicLed = "GsmClientTest/led";
 const char* MQTT_topicInit = "GsmClientTest/init";
 const char* MQTT_topicLedStatus = "GsmClientTest/ledStatus";
+const char* get_attr = "get_attr";
 #endif
-
 
 #if TINY_GSM_TEST_GPRS && not defined TINY_GSM_MODEM_HAS_GPRS
 #undef TINY_GSM_TEST_GPRS
@@ -120,9 +115,7 @@ const char* MQTT_topicLedStatus = "GsmClientTest/ledStatus";
 #define TINY_GSM_USE_WIFI false
 #endif
 
-
 TinyGsm modem(GSM_serialObj);
-
 
 // mqtt configuration
 
@@ -147,25 +140,60 @@ MQTT_stats_t MQTT_stats = {0, 0, 0, 0, 0};
  * Create one or more TinyGSM client instances
  * For a single connection, use "TinyGsmClient client(modem);".
  */
-TinyGsmClient TinyGSM_client(modem);
+
+//TinyGsmClient TinyGSM_client(modem);
+
+TinyGsmClient TinyGSM_client_1(modem,0);
+TinyGsmClient TinyGSM_client_2(modem,1);
+TinyGsmClient TinyGSM_client_coord(modem,2);
 
 /*
  * The PubSubClient library provides a client for doing simple 
  * publish/subscribe messaging with a server that supports MQTT.
  */
-PubSubClient MQTT_client(TinyGSM_client);
+//PubSubClient MQTT_client(TinyGSM_client);
+PubSubClient MQTT_client_01(TinyGSM_client_1);
+PubSubClient MQTT_client_02(TinyGSM_client_2);
+PubSubClient MQTT_client_coord(TinyGSM_client_coord);
+
 bool GSM_CNT_STS = false,
      GSM_NETWRK_CNT_STS = false,
      GSM_GPRS_CNT_STS = false,
      GSM_CLOUD_CNT_STS = false;
+
+bool MQTT_CLIENT_01_CNT_STS = false,
+     MQTT_CLIENT_02_CNT_STS = false,
+     MQTT_CLIENT_COORD_CNT_STS = false;
 
 #define LED_PIN 13
 
 int ledStatus = LOW;
 uint32_t lastReconnectAttempt = 0;
 
+//queues
+static QueueHandle_t CoordIntf_evtQHndl;
+static QueueHandle_t Queue2;
+static QueueHandle_t Queue3;
+static QueueHandle_t Queue4;
+
 /*call back function */
-void MQTT_callback(char* topic, byte* payload, unsigned int len) 
+void MQTT_callback_1(char* topic, byte* payload, unsigned int len) 
+{
+   SerialMon.print("Message arrived [");
+   SerialMon.print(topic);
+   SerialMon.print("]: ");
+   SerialMon.write(payload, len);
+   SerialMon.println();
+   // Only proceed if incoming message's topic matches
+   if (String(topic) == get_attr) 
+   {
+       ledStatus = !ledStatus;
+       digitalWrite(LED_PIN, ledStatus);
+       Serial.printf("\nMQTT call back Ack...\n");
+ //      MQTT_client_1.publish(MQTT_topicLedStatus, ledStatus ? "1" : "0");
+   }
+}
+void MQTT_callback_2(char* topic, byte* payload, unsigned int len) 
 {
    SerialMon.print("Message arrived [");
    SerialMon.print(topic);
@@ -173,27 +201,59 @@ void MQTT_callback(char* topic, byte* payload, unsigned int len)
    SerialMon.write(payload, len);
    SerialMon.println();
 
-   // Only proceed if incoming message's topic matches
-   if (String(topic) == MQTT_topicLed) 
+   if (String(topic) == get_attr) 
    {
        ledStatus = !ledStatus;
        digitalWrite(LED_PIN, ledStatus);
-       MQTT_client.publish(MQTT_topicLedStatus, ledStatus ? "1" : "0");
+       Serial.printf("\nMQTT call back Ack...\n");
+ //      MQTT_client_2.publish(MQTT_topicLedStatus, ledStatus ? "1" : "0");
    }
 }
 
-boolean MODEM_restarted = false;
+int mqttMsgPyldLen=0;
+void MQTT_callback_coord(char* topic, byte* payload, unsigned int len) 
+{
+   SerialMon.print("Message arrived [");
+   SerialMon.print(topic);
+   SerialMon.print("]: ");
+   SerialMon.write(payload, len);
+   SerialMon.println();
+   byte* mqttMsgSub;       
+    
+    mqttMsgSub = (byte*)malloc(sizeof(byte)*len);
+    if(mqttMsgSub== NULL)
+        return;    
+    memcpy(mqttMsgSub,payload,len);
+          Serial.printf("\nThe mqttMsgSub:");
+          Serial.write(mqttMsgSub,len);  
+          Serial.printf("\n");
+    mqttMsgPyldLen = len;      
+   if (String(topic) == get_attr) 
+   {
+       ledStatus = !ledStatus;
+       digitalWrite(LED_PIN, ledStatus);
+       Serial.printf("\nMQTT call back Ack...GET_ATTR[COORD]\n");
+       if(xQueueSend(Queue4,(void*)mqttMsgSub,(TickType_t)0) == pdPASS)
+       {
+          Serial.printf("\n MQTT msg ack passed into Queue4...\n");          
+       }
+       else
+       {
+          Serial.printf("\nNo queue space in Queue4...\n");
+       }
+       
+   }
+   free(mqttMsgSub);
+   mqttMsgSub =NULL;
+}
 
+boolean MODEM_restarted = false;
 #endif
 
 #define EVENT_FMT_TYPE_MERGED_DATA_JSON                     //used to send complete node data in one json
 
 #define COORD_INTF_UART_DRIVER_BUFF_SIZE (1024 * 2)
 #define COORD_INTF_EVT_QUEUE_SIZE  2
-//queues
-static QueueHandle_t CoordIntf_evtQHndl;
-static QueueHandle_t Queue2;
-static QueueHandle_t Queue3;
 
 
 #define COORD_INTF_TASK_RX_MSG_BUFF_LEN  256
@@ -422,6 +482,7 @@ char GW_jsonMsg[1024];
 #else
 //        Arduinojson 6
           DynamicJsonDocument jsonDoc(1024); 
+          DynamicJsonDocument jsonDoc_2(1024);
           JsonObject root = jsonDoc.to<JsonObject>();
 #endif  
 
@@ -464,31 +525,31 @@ void GW_appendToJsonBuff()
         }
            root["Sequence_number"] = seq_nr;                        
 #if 0
-      // ArduinoJson 5
           root.printTo(GW_jsonMsg);
 #else     
-      /*
-       * With ArduinoJson 6, you call the function serializeJson() and pass 
-       * the JsonArray, JsonObject, or the JsonDocument.
-       */
           serializeJson(jsonDoc, GW_jsonMsg);
 #endif
+          
           Serial.printf("\nComplete JSON MSG: ");
           Serial.printf(GW_jsonMsg);
           Serial.printf("\n");
-
-          jsonMsgLen = strlen(GW_jsonMsg);
-          //jsonMsgPtr_p =(char*)malloc(sizeof(jsonMsgLen));
+          
+          jsonMsgLen = strlen(GW_jsonMsg);       
+          //jsonMsgPtr_p = (char*)malloc(sizeof(jsonMsgLen));
           jsonMsgPtr_p = (char*)malloc(sizeof(GW_jsonMsg));
           if(jsonMsgPtr_p== NULL)
             return; 
             
-          memcpy(jsonMsgPtr_p,GW_jsonMsg,jsonMsgLen);
+          memcpy(jsonMsgPtr_p,GW_jsonMsg,jsonMsgLen+1);
           Serial.printf("\nThe jsonMsgLen <%d>\n",jsonMsgLen);  
           Serial.printf("\nThe jsonMsgPtr_p:");
           Serial.printf(jsonMsgPtr_p);  
           Serial.printf("\n");
-          
+
+      if(strcmp(GW_devName,"WSN-fe0d4a46") == 0)
+      {
+        if(MQTT_CLIENT_01_CNT_STS == true && GSM_CNT_STS == true)
+        {
           if(xQueueSend(Queue3,(void*)jsonMsgPtr_p,(TickType_t)5)==pdPASS)
           {
             Serial.printf("\nData Enqueued in Q3- success\n"); 
@@ -497,6 +558,39 @@ void GW_appendToJsonBuff()
           {
             Serial.printf("\n No Queue space in Queue3...\n");
           }
+        }
+        else if(MQTT_CLIENT_01_CNT_STS == false)
+        {
+          Serial.printf("\nClient_01 setup failed\n");
+        }
+        else
+        {
+          Serial.printf("\nNetwork Connection Not yet established...\n");
+        }   
+      }
+    
+      if(strcmp(GW_devName,"WSN-fe0d5f7c") == 0)
+      {
+        if(MQTT_CLIENT_02_CNT_STS == true && GSM_CNT_STS == true)
+        {
+          if(xQueueSend(Queue3,(void*)jsonMsgPtr_p,(TickType_t)5)==pdPASS)
+          {
+            Serial.printf("\nData Enqueued in Q3- success\n"); 
+          }
+          else
+          {
+            Serial.printf("\n No Queue space in Queue3...\n");
+          }
+        }
+        else if(MQTT_CLIENT_02_CNT_STS == false)
+        {
+          Serial.printf("\nClient_02 setup failed\n");
+        }
+        else
+        {
+          Serial.printf("\nNetwork Connection Not yet established...\n");
+        }   
+      }
           free(jsonMsgPtr_p);
           jsonMsgPtr_p = NULL; 
                     
@@ -1127,7 +1221,154 @@ static void CoordIntf_uartEvtTask(void *params_p)
     
   return;
 }
+// tx_task
 
+/*
+
+static cntxt_s uart_cntxt;
+
+void GW_htons(unsigned char *buff_p, unsigned short val)
+{
+   buff_p[0] = (val >> 8) & 0xff;
+   buff_p[1] = (val) & 0xff;
+}
+
+int GW_buildSendHdr(int msgType, unsigned char *pyldBuff_p, int pyldLen)
+{
+   unsigned char *buff_p = serTxBuff;
+   unsigned short calcCrc16;
+   static unsigned char seqNr = 0x0;
+   int rc;
+
+   Serial.printf("\n msgType <0x%x> \n");
+   Serial.printf("\nPayload:");
+   for(int i=0;i<pyldLen;i++)
+   {
+    Serial.printf("%c ",pyldBuff_p[i]);
+   }
+   Serial.printf("\n");
+/*
+   if (verbose)
+       printf("<%s> msgType<0x%x> \n", __FUNCTION__, msgType);
+*/
+/*
+   GW_htons(buff_p, msgType);
+   buff_p += UART_FRAME_HDR_MSG_TYPE_FIELD_LEN;
+
+   *buff_p = 0x0;
+   buff_p += UART_FRAME_HDR_FLAGS_FIELD_LEN;
+
+   *buff_p = seqNr ++;
+   buff_p += UART_FRAME_HDR_SEQ_NR_FIELD_LEN;
+
+   GW_htons(buff_p, pyldLen);
+   buff_p += UART_FRAME_HDR_PYLD_LEN_FIELD_LEN;
+
+   calcCrc16 = COORD_INTF_calcCkSum16(serTxBuff, UART_FRAME_HDR_HDR_CRC_FIELD_OFF);
+   GW_htons(buff_p, calcCrc16);  // no payload
+   buff_p += UART_FRAME_HDR_HDR_CRC_FIELD_LEN;
+
+   if (pyldLen > 0)
+   {
+       calcCrc16 = COORD_INTF_calcCkSum16(pyldBuff_p, pyldLen);
+       GW_htons(buff_p, calcCrc16);  // payload crc
+   }
+   else
+       GW_htons(buff_p, 0x0);  // no payload
+       
+  // rc = writePort(serTxBuff, UART_FRAME_HDR_LEN);
+  Serial.printf("\nThe write\n");
+   if (rc != 1)
+   {
+       printf("\nwritePort() failed !!\n");
+       rc = 20;
+   }
+/*
+   if (verbose)
+       printf("\nwritePort() done !!\n");
+*/
+/*
+   return rc;
+}
+*/
+
+/*
+int GW_getRadioBaudRate(void)
+{
+   int rc = GW_buildSendHdr(LPWMN_GW_MSG_TYPE_GET_RADIO_BAUD_RATE, NULL, 0x0);
+   if (rc != 1)
+       return 5;
+
+   rc = GW_readSerIntf(LPWMN_GW_MSG_TYPE_GET_RADIO_BAUD_RATE, 0);
+
+   return rc;
+}
+*/
+/*
+int GW_rebootCoordReq(void)
+{
+   int rc;
+
+   rc = GW_buildSendHdr(LPWMN_GW_MSG_TYPE_REBOOT_COORD, NULL, 0x0);
+   if (rc != 1)
+   {
+       printf("failed !! \n");
+       rc = 5;
+   }
+   else
+       printf("Request sent ... \n");
+   return rc;
+}
+*/
+
+//CoordIntf_txEvtTask
+void CoordIntf_txEvtTask(void *params_p)
+{
+  StaticJsonDocument<512> jsonDoc_coord;
+  byte rcvdMqttMsg[512];
+  DBG("\n CoordIntf_txEvtTask Running...\n");
+  while(1)
+  {
+     if(xQueueReceive(Queue4, (void *)&rcvdMqttMsg, (portTickType)portMAX_DELAY))
+      {
+        int i=0,i_tmp=0;
+        char rcvdMqttMsgCpy[512];
+        for(i=0; i<mqttMsgPyldLen; i++)
+        {
+          Serial.printf("%c",(char)rcvdMqttMsg[i]);
+          rcvdMqttMsgCpy[i] = (char)rcvdMqttMsg[i]; 
+        }
+        rcvdMqttMsg[i] = '\0';
+        rcvdMqttMsgCpy[i] = '\0';
+        Serial.printf("\nReceived MqttMsg in task-CorrdIntf_txEvtTask: <%s>, len <%d>",rcvdMqttMsg,mqttMsgPyldLen);  
+        DeserializationError error = deserializeJson(jsonDoc_coord, rcvdMqttMsgCpy);
+        if (error) {
+          Serial.print(F("deserializeJson() failed: "));
+          Serial.println(error.f_str());
+          return;
+        }
+        const char* rcvdCoordAttr = jsonDoc_coord["test"];
+          DBG("\n Coord Attribute: ");
+          Serial.printf(rcvdCoordAttr);
+          Serial.printf("\n");
+          rcvdMqttMsg[0] = '\0';
+
+
+      if (strcmp(rcvdCoordAttr, "grbr") == 0)
+      {
+          //rc = GW_getRadioBaudRate( );
+          //return rc;
+      }
+      if(strcmp(rcvdCoordAttr, "rstc") == 0)
+      {
+        Serial.printf("\nCoord Reset Cmd Ackw\n");
+        //rc = GW_rebootCoordReq( );
+        //return rc;       
+      }
+             
+      }      
+  }
+}
 void setup() 
 {
   // Set console baud rate
@@ -1157,8 +1398,9 @@ void setup()
                       &CoordIntf_evtQHndl,  // event queue handle
                       0);
   
-    Queue2 = xQueueCreate(10,sizeof(COORD_DATA_RCVD_PCKT_01));
-    Queue3 = xQueueCreate(10,sizeof(char)*1024); 
+    Queue2 = xQueueCreate(2,sizeof(COORD_DATA_RCVD_PCKT_01));
+    Queue3 = xQueueCreate(2,sizeof(char)*1024); 
+    Queue4 = xQueueCreate(2,sizeof(char)*1024);
     if(Queue2 == NULL)
     {
       Serial.printf("\nQueue2 not created...\n"); 
@@ -1167,40 +1409,34 @@ void setup()
     {
       Serial.printf("\nQueue2 not created...\n");
     }
+    if(Queue4 == NULL)
+    {
+      Serial.printf("\nQueue4 not created...\n");
+    }
   //Create a task to handler UART event from ISR
   xTaskCreate(CoordIntf_uartEvtTask, "COORD_INTF_UART_ISR_ROUTINE", 4000, NULL, 12, NULL);
 
   //task2
   xTaskCreate(CoordIntf_procCoordMsg,"COORD_INTF_PROC_COORD_MSG", 10000, NULL, 12, NULL);
+
+  xTaskCreate(CoordIntf_txEvtTask, "COORD_INTF_UART_ISR_ROUTINE", 10000, NULL, 12, NULL);
   
   // Configure serial port connected to the GSM Modem
   GSM_serialObj.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
   delay(10);
   
 #ifdef GSM_MQTT_TCP
-  MQTT_client.setServer(MQTT_brokerURL, 1883);
-  MQTT_client.setCallback(MQTT_callback);
-  //MQTT_client.setServer("dashboard.wisense.in", 1883);
-  //MQTT_client.setCallback(MQTT_callback);
+ // MQTT_client.setServer(MQTT_brokerURL, 1883);
+ // MQTT_client.setCallback(MQTT_callback);
+  MQTT_client_01.setServer(MQTT_brokerWsURL, 1883);
+  MQTT_client_01.setCallback(MQTT_callback_1);
+  MQTT_client_02.setServer(MQTT_brokerWsURL,1883);
+  MQTT_client_02.setCallback(MQTT_callback_2);
+  MQTT_client_coord.setServer(MQTT_brokerURL, 1883);
+  MQTT_client_coord.setCallback(MQTT_callback_coord);
 #endif
-
   DBG("Setup Complete :-)");
 }
-
-boolean mqttConnect(char* user, char* pass)
-{
-    boolean status;
-    status = MQTT_client.connect("GsmClient",user,pass);  
-    //client.connect("GsmClient", user , pass);
-    int sts = 0;
-    while(!MQTT_client.connected() && sts<3)
-    {
-      sts++;
-      status = MQTT_client.connect("GsmClient", user , pass);
-    }
-    return status;
-}
-
 
 void loop() 
 {  
@@ -1226,7 +1462,7 @@ void loop()
           // Restart autobaud in case GSM just rebooted
           // TinyGsmAutoBaud(GSM_serialObj, GSM_AUTOBAUD_MIN, GSM_AUTOBAUD_MAX);
 
-          delay(10*1000); 
+          delay(1*1000); 
           //delay(1*1000);    //commented
           //add all the error checks here.
           return;
@@ -1244,7 +1480,7 @@ void loop()
       // Wait for network registration to be successful
       if (!modem.waitForNetwork(600000L)) 
       {
-          delay(10*1000);
+          delay(1*1000);
           return;
       }
 
@@ -1255,7 +1491,7 @@ void loop()
       else
       {
           DBG("Still not registered to the network ... delaying for 10 secs before retrying !!!");
-          delay(10*1000);
+          delay(1*1000);
           return;
       }
   }
@@ -1272,7 +1508,7 @@ void loop()
       if (!modem.gprsConnect(apn, gprsUser, gprsPass)) 
       {
           DBG("GPRS connection setup failed ... delaying for 10 secs before retrying !!! ");
-          delay(10*1000);
+          delay(1*1000);
           return;
       }
       else
@@ -1307,47 +1543,100 @@ void loop()
    * This method allows your code to quickly determine whether an mqttclient 
    * object is currently connected to an MQTT broker:
    */
-#if 1
-  if (!MQTT_client.connected())
+
+  if (!MQTT_client_coord.connected())
   {
-      DBG("Establishing MQTT connection to ", MQTT_brokerURL);
-      
-      /*
-       * boolean connect (clientID, 
-       *                  [username, password], 
-       *                  [willTopic, willQoS, willRetain, willMessage], 
-       *                  [cleanSession]
-       *                 )
-       * Returns:
-       *  > false - connection failed
-       *  > true - connection succeeded
-       */
-      boolean status = MQTT_client.connect("GsmClient","NULL","NULL");         // clientId
+      DBG("Establishing MQTT connection to ", MQTT_brokerURL);     
+      boolean status = MQTT_client_coord.connect("MQTT_client_coord","NULL","NULL");         // clientId,usn,pwd
+      char* message = "{\"test\":\"success\"}";
+      int length = strlen(message);
+      boolean retained = true;
+      MQTT_client_coord.publish("get_attr",(byte*)message,length,retained);
+      delay(1000);
       if (status == false) 
       {
-          DBG("Failed to setup MQTT connection !!! ");
-          delay(10*1000);
-          return;
+          DBG("Failed to setup MQTT_client_01 connection !!! ");
+          delay(1*1000);
+          //return;
       }
       else
       {
-          GSM_CLOUD_CNT_STS = true;
-          DBG("MQTT connection established :-) ");  
-          MQTT_client.publish(MQTT_topicInit, "GsmClientTest started");    /* creating json */
+          MQTT_CLIENT_COORD_CNT_STS = true;
+          DBG("MQTT connection established for MQTT_client_coord :-) ");  
+          //MQTT_client_coord.publish("client_coord/test","hi_from_coord");
+          boolean sub_sts = MQTT_client_coord.subscribe(get_attr);
+          if(sub_sts == false)
+          {
+            Serial.printf("\nsending the subscribe failed\n");
+          }
+          if(sub_sts == true)
+          {
+            Serial.printf("\nSubscription succes\n");
+          }
       }
   }
-  if(MQTT_client.connected())
+  if(MQTT_client_coord.connected())
   {
-    GSM_CLOUD_CNT_STS = true;
+    MQTT_CLIENT_COORD_CNT_STS = true;
+    //Serial.printf("\nMQTT_client_coord connected success\n");
   }
-#endif
+
+//MQTT_client_01
+
+  if (!MQTT_client_01.connected())
+  {
+      DBG("Establishing MQTT connection to ", MQTT_brokerWsURL);     
+      boolean status = MQTT_client_01.connect("GsmClient_01","p0lsPBWqHD2AWhmKUlEu","NULL");         // clientId,usn,pwd
+      if (status == false) 
+      {
+          DBG("Failed to setup MQTT_client_01 connection !!! ");
+          delay(1*1000);
+          //return;
+      }
+      else
+      {
+          MQTT_CLIENT_01_CNT_STS = true;
+          DBG("MQTT_client_01 connection established :-) ");  
+          //MQTT_client_01.subscribe(get_attr);
+      }
+  }
+  if(MQTT_client_01.connected())
+  {
+    MQTT_CLIENT_01_CNT_STS = true;
+    //Serial.printf("\nMQTT_client_01 connected success\n");
+  }
+
+
+//MQTT_client_02
+  if (!MQTT_client_02.connected())
+  {
+      DBG("Establishing MQTT connection to ", MQTT_brokerWsURL);     
+      boolean status = MQTT_client_02.connect("GsmClient_02","st8T3pTKQ2LUBWBhCrzk","NULL");         // clientId,usn,pwd
+      if (status == false) 
+      {
+          DBG("Failed to setup MQTT_client_02 connection !!! ");
+          delay(1*1000);
+          //return;
+      }
+      else
+      {
+          MQTT_CLIENT_02_CNT_STS = true;
+          DBG("MQTT_client_02 connection established :-) ");  
+          //MQTT_client_02.subscribe(get_attr);
+      }
+  }
+  if(MQTT_client_02.connected())
+  {
+    MQTT_CLIENT_02_CNT_STS = true;
+    //Serial.printf("\nMQTT_client_02 connected success\n");
+  }
+  
 /*
 * Continously Monitoring the connect status of network and GPRS.
 * if connection was still up then status will be True, payload are ready to publish to cloud
 * if no, drop all the payload and try to connect with networks and provide LED indication.
 *
 */
-
   if(modem.isNetworkConnected())
   {
       GSM_NETWRK_CNT_STS = true;
@@ -1373,87 +1662,101 @@ void loop()
     GSM_CNT_STS = true;
     //Serial.printf("\n Network and GPRS connection Successfully...\n");
   }
-
-if(xQueueReceive(Queue3, &rcvdNodePyld, (portTickType)portMAX_DELAY))
+  
+if(xQueueReceive(Queue3, &rcvdNodePyld, (portTickType)0))
 {
   Serial.printf("\nReceived Complete payload: ");
   Serial.printf("%s",rcvdNodePyld);
   Serial.printf("\n");
-   if(GSM_CLOUD_CNT_STS == true && GSM_CNT_STS == true)    //checking both network/GPRS & cloud
+  char rcvdNodeName[13];
+  int rcvdNodeNameCnt=0, rcvdNodePyldLen;
+  rcvdNodePyldLen = strlen(rcvdNodePyld);
+  for(int i=9;i<21;i++)
   {
-      /*
-       * publish( ) returns
-       *   > false - publish failed, either connection lost or message too large
-       *   > true - publish succeeded
-       *   
-       *   publish( ) is obviously a blocking call.
-       */
-       
-          //boolean status = mqttConnect("NULL","NULL");
-          if(MQTT_client.connected())
-          {
-            GSM_CLOUD_CNT_STS = true;
-            Serial.printf("\nMQTT Connect State: Connected\n");
-          }
-          else
-          {
-            GSM_CLOUD_CNT_STS = false;
-            Serial.printf("\nMQTT Connect State: Not-Connected\n");
-            Serial.printf("\nRetrying MQTT Connection...\n"); 
-              boolean status = MQTT_client.connect("GsmClient","NULL","NULL");  
-              if(status == false)
-              {
-                GSM_CLOUD_CNT_STS = false;
-                DBG("Failed to setup MQTT connection !!! ");
-              }
-              else
-              {
-                DBG("MQTT Connection Established");
-                GSM_CLOUD_CNT_STS = true;
-                DBG("MQTT connection established :-) ");  
-              }
-            }
-             boolean rc = MQTT_client.publish("v1/devices/me/telemetry",rcvdNodePyld);             
-             MQTT_stats.pubCnt ++;
-            if (rc == false)
-            {
-                MQTT_stats.pubFlrCnt ++;
-                DBG("MQTT publish failed !!!, cnt: ", MQTT_stats.pubFlrCnt);
-                if (MQTT_client.connected())
-                {
-                  DBG("MQTT publish failed but MQTT conn is still up");
-                  MQTT_stats.pubFlrConnUpCnt ++;
-                }
-             else
-             {
-                DBG("MQTT publish failed and MQTT conn is down");
-                MQTT_stats.pubFlrConnDownCnt ++;
-             }
-            }
-            else
-            {
-              MQTT_stats.pubSuccessCnt ++;
-              DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
-              Serial.printf("\n**********************MSG Published to Cloud - Success****************\n");
-             }       
-             Serial.printf("\n\n\n");   
-             //MQTT_client.disconnect();      
-}
-else
-{
-  Serial.printf("\ndrooping payload \n");
-  if(GSM_CNT_STS == false)
-  {
-    Serial.printf("\nGSM Network/gprs connection not established..\n");
+    Serial.printf("%c",rcvdNodePyld[i]);
+    rcvdNodeName[rcvdNodeNameCnt]=rcvdNodePyld[i];
+    rcvdNodeNameCnt++;
   }
-  if(GSM_CLOUD_CNT_STS == false)
-  {
-    Serial.printf("\nCloud/mqtt connection not established...\n");
-  }
-}
-}
-#endif
+  rcvdNodeName[rcvdNodeNameCnt]= '\0';
 
-  //Serial.printf("\nLoop running forever....\n");
+
+  if(strcmp(rcvdNodeName,"WSN-fe0d4a46") == 0)
+  {
+    Serial.printf("\nReceived Node Name:[node-1] <%s>",rcvdNodeName);   
+    if(MQTT_CLIENT_01_CNT_STS == true && GSM_CNT_STS == true)    //checking both network/GPRS & cloud
+    {
+      boolean rc = MQTT_client_01.publish("v1/devices/me/telemetry",rcvdNodePyld);             
+      MQTT_stats.pubCnt ++;
+      if (rc == false)
+      {
+        MQTT_stats.pubFlrCnt ++;
+        DBG("MQTT publish failed !!!, cnt: ", MQTT_stats.pubFlrCnt);
+        if (MQTT_client_01.connected())
+        {
+          DBG("MQTT publish failed but MQTT conn is still up");
+          MQTT_stats.pubFlrConnUpCnt ++;
+        }
+        else
+        {
+          DBG("MQTT publish failed and MQTT conn is down");
+          MQTT_stats.pubFlrConnDownCnt ++;
+        }
+      }
+      else
+      {
+        MQTT_stats.pubSuccessCnt ++;
+        DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
+        Serial.printf("\n**********************MSG Published to Cloud - Success****************\n");
+      }       
+      Serial.printf("\n\n\n");   
+    }
+  }//client-01
+
+  if(strcmp(rcvdNodeName,"WSN-fe0d5f7c") == 0)
+  {
+    Serial.printf("\nReceived Node Name[node-2]: <%s>",rcvdNodeName);
+    if(MQTT_CLIENT_02_CNT_STS == true && GSM_CNT_STS == true)    //checking both network/GPRS & cloud
+    {
+      boolean rc = MQTT_client_02.publish("v1/devices/me/telemetry",rcvdNodePyld);             
+      MQTT_stats.pubCnt ++;
+      if (rc == false)
+      {
+        MQTT_stats.pubFlrCnt ++;
+        DBG("MQTT publish failed !!!, cnt: ", MQTT_stats.pubFlrCnt);
+        if (MQTT_client_02.connected())
+        {
+          DBG("MQTT publish failed but MQTT conn is still up");
+          MQTT_stats.pubFlrConnUpCnt ++;
+        }
+        else
+        {
+          DBG("MQTT publish failed and MQTT conn is down");
+          MQTT_stats.pubFlrConnDownCnt ++;
+        }
+      }
+      else
+      {
+        MQTT_stats.pubSuccessCnt ++;
+        DBG("MQTT publish successful, cnt: ", MQTT_stats.pubSuccessCnt);
+        Serial.printf("\n**********************MSG Published to Cloud - Success****************\n");
+      }       
+      Serial.printf("\n\n\n");
+    }
+  }
+  rcvdNodePyld[0] = '\0';  
+}
+//   MQTT_client.loop();
+   MQTT_client_01.loop();
+   MQTT_client_02.loop();
+   MQTT_client_coord.loop();
+#endif  
   return;
 }
+
+/*
+ * 
+ * char* message = "Hello World";
+int length = strlen(message);
+boolean retained = true;
+mqttClient.publish("myTopic",(byte*)message,length,retained);
+ */
