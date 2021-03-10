@@ -888,12 +888,11 @@ void COORD_INTF_procRcvdFrame(void)
                   else
                   {
                     Serial.printf("\nNo queue space in Queue5...\n");
-                  }         
-                  hdrAcked = 0;            
+                  }              
             }
             else
               {
-                  Serial.printf("<%s> hdr flag <0x%02x> !! \n", __FUNCTION__, hdrFlags);
+                  Serial.printf("<%s> hdr flag <0x%02x> hdrAcked <0> !! \n", __FUNCTION__, hdrFlags);
                   hdrAcked = 0;
               }
            }
@@ -1230,6 +1229,306 @@ int GW_getRadioChannReqHndlr( )
    return rc;
 }
 
+int GW_setNodeAttrVal(unsigned int shortAddr,
+                      unsigned int attrId,
+                      int attrVal,
+                      const char *strAttrVal_p)
+{
+   int rc = 1, pyldLen, off = 0, attrValLen = 0;
+   unsigned char *pyld_p;
+
+   pyldLen = LPWMN_MAC_SHORT_ADDR_LEN
+             + DIS_MSG_TYPE_SZ
+             + DIS_TLV_HDR_SZ
+             + DIS_ATTR_ID_TLV_SZ
+             + DIS_TLV_HDR_SZ;
+
+   switch (attrId)
+   {
+      case APP_LOAD_CELL_RATED_OUTPUT_LOAD_IN_KGS_ATTR_ID:
+      case APP_LOAD_CELL_NOMINAL_LOAD_IN_KGS_ATTR_ID:
+      case APP_LOAD_CELL_ZERO_BALANCE_FIGURE_ATTR_ID:
+      case APP_LOAD_CELL_SENSITIVITY_IN_UV_PER_V_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case APP_LOAD_CELL_SERIAL_NR_ATTR_ID:
+           attrValLen = 8;
+           break;
+
+      case AD7797_SYSTEM_ZERO_SCALE_CAL_REQ_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case APP_SENSOR_RPT_ENA_BIT_MSK_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case PLTFRM_TEST_WD_RESET_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case RADIO_AFC_FUNCIONALITY_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case 5000:
+           attrValLen = 1;
+           break;
+
+      case NM_INTER_SCAN_INTERVAL_SECS_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case PHY_TX_POWER_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case NM_MAX_SCAN_FLR_CNT_TO_RESET_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case CC1120_AGC_CS_THR_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case RADIO_FREQ_OFFSET_ATTR_ID:
+           // -18000 HZ to +18000 HZ
+           attrValLen = 2;
+           break;
+
+      case RADIO_RF_TX_TEST_CHANN_ID_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case RADIO_RF_TX_TEST_PA_CFG_ATTR_ID:
+           // 0 to 255
+           attrValLen = 1;
+           break;
+
+      case RADIO_START_CW_UNMOD_TX_TEST_ATTR_ID:
+           // 1 to 65535
+           attrValLen = 2;
+           break;
+
+      case RADIO_START_CW_MOD_TX_TEST_ATTR_ID:
+           // 1 to 65535
+           attrValLen = 2;
+           break;
+
+      case APP_SNSR_DATA_REPORT_MODE_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case WSMS100_SQ_WAVE_FREQUENCY_CFG_ATTR_ID:
+           attrValLen = 4;
+           break;
+
+      case RADIO_TX_TO_RX_TURN_AROUND_DELAY_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case APP_MAX_SNSR_DATA_REPORT_INTERVAL_SECS_ATTR_ID:
+           attrValLen = 4;
+           break;
+
+      case APP_SNSR_DATA_REPORT_DELTA_THRESHOLD_ATTR_ID:
+           attrValLen = 4;
+           break;
+
+      case DEV_PULSE_CNTR_RESET_CNTR:
+           attrValLen = 4;
+           break;
+
+      case APP_MAX_SENSOR_DATA_TX_INTERVAL_ATTR_ID:
+           attrValLen = 4;
+           break;
+
+      case APP_PIR_SENSOR_ENA_DIS_CTRL_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case APP_VEH_DET_MFS_HPF_DETECTION_ALPHA:
+           attrValLen = 1;
+           break;
+
+      case APP_VEH_DET_MFS_HPF_DETECTION_THRESHOLD:
+           attrValLen = 2;
+           break;
+
+      case APP_VEH_DET_MFS_HPF_SETTLING_THRESHOLD:
+           attrValLen = 2;
+           break;
+
+      case MAC_ACK_TMO_DELTA_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case MAC_TX_ON_CCA_ENA_FLAG_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case MAC_LPWMN_ID_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case MESH_TRIGGER_PATH_DISC_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case FFD_LAST_APP_TX_TO_RBT_INTERVAL_MULTIPLE_ATTR_ID:
+           attrValLen = 1;
+           break;
+
+      case FFD_LAST_APP_TX_TO_RBT_INTERVAL_SECS_ATTR_ID:
+           attrValLen = 4;
+           break;
+
+      case APP_MAG3110_X_AXIS_BASE_VAL_MFS_ATTR_ID:
+      case APP_MAG3110_Y_AXIS_BASE_VAL_MFS_ATTR_ID:
+      case APP_MAG3110_Z_AXIS_BASE_VAL_MFS_ATTR_ID:
+           attrValLen = 2;
+           break;
+
+      case PHY_RAW_BAUD_RATE_ATTR_ID:
+           attrValLen = 4;
+           break;
+
+      default:
+           rc = 0;
+           Serial.printf("attribute id <%u> not supported !! \n", attrId);
+           break;
+   }
+
+   if (rc == 0)
+       return rc;
+
+   pyldLen += attrValLen;
+
+   pyld_p = (unsigned char *)malloc(pyldLen);
+   if (pyld_p == NULL)
+   {
+       printf("malloc(%d) failed !! \n", pyldLen);
+       return 1;
+   }
+
+   GW_htons(pyld_p, shortAddr);
+   off = LPWMN_MAC_SHORT_ADDR_LEN;
+   pyld_p[off ++] = DIS_MSG_TYPE_SET_ATTR_VAL;
+   pyld_p[off ++] = DIS_TLV_TYPE_ATTR_INFO;
+   pyld_p[off ++] = DIS_ATTR_ID_TLV_SZ + DIS_TLV_HDR_SZ + attrValLen;
+   pyld_p[off ++] = DIS_TLV_TYPE_ATTR_ID;
+   pyld_p[off ++] = DIS_ATTR_ID_FIELD_SZ;
+   GW_htons(pyld_p + off, attrId);
+   off += DIS_ATTR_ID_FIELD_SZ;
+   pyld_p[off ++] = DIS_TLV_TYPE_ATTR_VAL;
+   pyld_p[off ++] = attrValLen;
+   switch (attrValLen)
+   {
+      case 1:
+          pyld_p[off] = attrVal;
+          break;
+
+      case 2:
+          GW_htons(pyld_p + off, attrVal);
+          break;
+
+      case 4:
+          GW_htonl(pyld_p + off, attrVal);
+          break;
+
+      default:
+          if (attrId == APP_LOAD_CELL_SERIAL_NR_ATTR_ID)
+          {
+              memset(pyld_p + off, 0x20, 8);
+              memcpy(pyld_p + off, strAttrVal_p, strlen(strAttrVal_p));
+          }
+          break;
+   }
+   off += attrValLen;
+
+   rc = GW_buildSendHdr(LPWMN_GW_MSG_TYPE_RELAY_TO_NODE,
+                        pyld_p, pyldLen);
+   if (rc != 1)
+       return rc;
+   if(rc == 1)
+    Serial.printf("Gw_buildSendHdr function successfully written waiting for coord Response ACK !! \n");
+
+   Serial.printf("HdrACkSts before Ack <%d> \n", hdrAckSts);   
+   if (xQueueReceive(Queue5, (void *)&hdrAckSts, (portTickType)10))  
+    {
+      if(hdrAckSts == 1)
+      {
+        Serial.printf("Hdr acked...<%s> !! \n",__FUNCTION__);
+        for(int i_a=0;i_a<pyldLen;i_a++)
+        {
+          Serial.printf("%x ",pyld_p[i_a]);
+        }
+        rc = writePort(pyld_p, pyldLen);
+        if (rc != 1)
+        {
+          Serial.printf("<%s> writePort(%d) failed !! \n",
+                                                  __FUNCTION__, pyldLen);
+          return 3;
+        }
+        else
+        {
+          Serial.printf("Payload Request Send <%s> !! \n",__FUNCTION__);
+        }   
+      }
+      if(hdrAckSts == 0)
+      {
+        Serial.printf("Header not acked <%s> !! \n",__FUNCTION__);
+      }
+        hdrAckSts = 0;
+   }
+ 
+   
+   return rc;
+   /* 
+   rc = GW_readSerIntf(UART_MSG_TYPE_ACK, 0);
+   if (rc != 0)
+       return rc;
+
+   if (hdrAcked == 0x0)
+   {
+       printf("Header not acked !! \n");
+       return 2;
+   }
+
+   if (verbose)
+       printf("Header acked \n");
+
+   if (verbose)
+   {
+       int idx;
+
+       printf("\n -------------------------- \n");
+
+       for (idx=0; idx<pyldLen; idx++)
+            printf(" 0x%02x ", pyld_p[idx]);
+
+       printf("\n -------------------------- \n");
+   }
+
+   // Send payload
+   rc = writePort(pyld_p, pyldLen);
+   if (rc != 1)
+   {
+       printf("<%s> writePort(%d) failed !! \n",
+              __FUNCTION__, pyldLen);
+       return 3;
+   }
+
+   printf("Request sent...... \n");
+   */
+
+   // printf("Request sent. Waiting for response ..... \n");
+   // rc = GW_readSerIntf(LPWMN_GW_MSG_TYPE_SET_COORD_ATTR_VAL, 0);
+
+
+}
+
 int GW_setCoordAttrVal(unsigned int shortAddr,
                        unsigned int attrId,
                        int attrVal)
@@ -1369,18 +1668,17 @@ int GW_setCoordAttrVal(unsigned int shortAddr,
    }
    rc = GW_buildSendHdr(LPWMN_GW_MSG_TYPE_SET_COORD_ATTR_VAL,
                         pyld_p, pyldLen);
-   if(rc == 1)
-   {
-    Serial.printf("GW_builSendHdr RC:<%d> !! \n",rc);
-   }
    if (rc != 1)
        return rc;
-   //hdrAckSts = 0;
+   if(rc == 1)
+    Serial.printf("Gw_buildSendHdr function successfully written waiting for coord Response ACK !! \n");
+
+   Serial.printf("HdrACkSts before Ack <%d> \n", hdrAckSts);  
    if (xQueueReceive(Queue5, (void *)&hdrAckSts, (portTickType)10))  
     {
       if(hdrAckSts == 1)
       {
-        Serial.printf("Hdr acked... !! \n");
+        Serial.printf("Hdr acked <%s> !! \n", __FUNCTION__);
         for(int i_a=0;i_a<pyldLen;i_a++)
         {
           Serial.printf("%x ",pyld_p[i_a]);
@@ -1394,16 +1692,15 @@ int GW_setCoordAttrVal(unsigned int shortAddr,
         }
         else
         {
-          Serial.printf("Payload Request Send.. \n");
+          Serial.printf("Payload Request Send <%s> !! \n", __FUNCTION__);
         }   
       }
       if(hdrAckSts == 0)
       {
         Serial.printf("Header not acked !! \n");
       }
+        hdrAckSts = 0;
    }
-    hdrAckSts = 0;
-   // hdrAcked = 0;
   
      return rc;
 }
@@ -1607,20 +1904,29 @@ void CoordIntf_txEvtTask(void *params_p)
                 }
                 else
                 {
-                  Serial.printf("Request Send <%d> !! \n",rc);
+                  Serial.printf("Request Send, Coord BaudRate Changed <%d> !! \n",rc);
                 }
               }
               else
               {
-
-
+                int rc = GW_setNodeAttrVal(shortAddr, attrId, attrVal, strAttrVal_p);
+                if(rc != 1)
+                {
+                  Serial.printf("failed to [setNodeAttrVal] <%d> \n",rc);  
+                }
+                else
+                {
+                  Serial.printf("Request Send [SetNodeAttrVal] !! \n");
+                }
 
               }
             }
             
           }
         }
-      } 
+      }
+      shortAddr = attrId = attrVal = 0;
+      shortAddrCpy[0] = attrIdCpy[0] = attrValCpy[0] = '\0';
       
       if (strcmp(rcvdCoordAttr, "sc") == 0)
       {
@@ -1656,6 +1962,7 @@ void CoordIntf_txEvtTask(void *params_p)
     }
   }
 }
+
 void setup()
 {
   SerialMon.begin(115200);
@@ -1677,8 +1984,6 @@ void setup()
   Queue2 = xQueueCreate(2, sizeof(COORD_DATA_RCVD_PCKT_01));
   Queue3 = xQueueCreate(2, sizeof(char) * 1024);
   Queue4 = xQueueCreate(2, sizeof(char) * 1024);
-//  Queue5 = xQueueCreate(2, sizeof(int) * 10);
-//  Queue6 = xQueueCreate(2, sizeof(char) * 256); 
   Queue5 = xQueueCreate(2, sizeof(hdrAcked));
   Queue6 = xQueueCreate(2, sizeof(char) * 1024); 
   if (Queue2 == NULL)
