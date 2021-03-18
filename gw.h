@@ -11,6 +11,9 @@
  * permission of the author.
  */
 
+
+
+
 #ifndef __GW_H__
 #define __GW_H__
 
@@ -66,20 +69,17 @@
 #define LPWMN_GW_MSG_TYPE_DEL_NODE_FROM_BLACK_LIST  0x48
 #define LPWMN_GW_MSG_TYPE_DELETE_BLACK_LIST  0x49
 
-
 #define LPWMN_GW_MSG_TYPE_CFG_DROP_BCN_REQS  0x4a
 #define LPWMN_GW_MSG_TYPE_CFG_ACCEPT_BCN_REQS  0x4b
 #define LPWMN_GW_MSG_TYPE_GET_BCN_REQ_HANDLING_CFG  0x4c
 
 #define LPWMN_GW_MSG_TYPE_GET_BLACK_LIST_ENTRY  0x4d
-
 #define LPWMN_GW_MSG_TYPE_SET_NWK_ID          0x50
 #define LPWMN_GW_MSG_TYPE_SET_RADIO_CHANNEL         0x51
 #define LPWMN_GW_MSG_TYPE_SET_NWK_COORD_EXT_ADDR  0x52
 #define LPWMN_GW_MSG_TYPE_SET_RADIO_TX_PWR        0x53
 #define LPWMN_GW_MSG_TYPE_START_COORD             0x54
 #define LPWMN_GW_MSG_TYPE_STOP_COORD              0x55
-
 
 #define LPWMN_GW_MSG_TYPE_GET_NWK_ID          0x59
 #define LPWMN_GW_MSG_TYPE_GET_NWK_CHANNEL         0x5a
@@ -190,6 +190,10 @@
 #define LPWMN_MSG_RSSI_LEN  1
 #define LPWMN_MSG_CORR_LQI_LEN  1 
 
+#define LPWMN_MAC_SHORT_ADDR_LEN  2
+#define LPWMN_MAC_EXT_ADDR_LEN  8
+#define LPWMN_MAC_NODE_CAPABILITY_INFO_LEN  1
+
 
 #define GW_NODE_MAX_CHAN_CNT  32
 
@@ -205,6 +209,13 @@
 
 #define LPWMN_GW_PATH_DISC_EVT_HOP_CNT_FIELD_LEN  1
 #define LPWMN_GW_PATH_DISC_EVT_STS_FIELD_LEN  1
+
+#define LPWMN_COORD_SHORT_ADDR  0x1
+#define LPWMN_MAX_UNICAST_SHORT_ADDR  0x7fff
+#define LPWMN_MIN_MULTICAST_SHORT_ADDR  0x8000
+#define LPWMN_MAX_MULTICAST_SHORT_ADDR  0xfffe
+#define LPWMN_BROADCAST_SHORT_ADDR  0xffff
+
 
 typedef enum
 {
@@ -260,5 +271,8 @@ typedef enum
 #define THINGSPEAK_CHANNEL_MIN_FIELD_NR  1
 #define THINGSPEAK_CHANNEL_MAX_FIELD_NR  8
 
+
+extern unsigned char expDisMsgType = 0xff;
+extern unsigned short expDisMsgSrcShortAddr = LPWMN_BROADCAST_SHORT_ADDR;
 
 #endif
