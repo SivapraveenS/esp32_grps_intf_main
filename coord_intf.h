@@ -1,10 +1,12 @@
 /*
+ *********************************************************************
  * File Name : coord_intf.h
  * Author : ram krishnan (rkris@wisense.in)
  * Created : Feb/3/2021
  *
- * Copyright (c) <ram krishnan>
+ * Copyright (c) WiSense Technologies Pvt Ltd
  * All rights reserved.
+ *********************************************************************
  */
 
 #ifndef __COORD_INTF_ENA__

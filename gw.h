@@ -4,15 +4,12 @@
  * Created: Nov/16/2017
  *
  *
- * Copyright (c) <2018>, <ram krishnan>
+ * Copyright (c) <2018>, WiSense Technologies Pvt Ltd
  * All rights reserved.
  *
  * File cannot be copied and/or distributed without the express
  * permission of the author.
  */
-
-
-
 
 #ifndef __GW_H__
 #define __GW_H__
@@ -271,8 +268,5 @@ typedef enum
 #define THINGSPEAK_CHANNEL_MIN_FIELD_NR  1
 #define THINGSPEAK_CHANNEL_MAX_FIELD_NR  8
 
-
-extern unsigned char expDisMsgType = 0xff;
-extern unsigned short expDisMsgSrcShortAddr = LPWMN_BROADCAST_SHORT_ADDR;
 
 #endif

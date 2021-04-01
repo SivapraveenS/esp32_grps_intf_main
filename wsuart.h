@@ -1,3 +1,16 @@
+/*
+ *********************************************************************
+ * File: wsuart.h
+ * 
+ * Author: rkris@wisense.in / siva@wisense.in
+ * 
+ * Date: March/2021
+ * 
+ * Copyright (C) WiSense Technologies Pvt Ltd
+ * All rights reserved.
+ * *******************************************************************
+ */
+
 #ifndef __WSUART_H__
 #define __WSUART_H__
 

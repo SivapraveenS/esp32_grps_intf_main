@@ -4,7 +4,7 @@
  * Created: Nov/16/2017
  *
  *
- * Copyright (c) <2018>, <ram krishnan>
+ * Copyright (c) <2018>, WiSense Technologies Pvt Ltd
  * All rights reserved.
  *
  * File cannot be copied and/or distributed without the express

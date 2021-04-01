@@ -1,265 +1,71 @@
+/*
+ *********************************************************************
+ * File: attr.ino
+ * 
+ * Author: rkris@wisense.in / siva@wisense.in
+ * 
+ * Date: March/2021
+ * 
+ * Copyright (C) WiSense Technologies Pvt Ltd
+ * All rights reserved.
+ * *******************************************************************
+ */
 
-int GW_getRadioBaudRate(void)
+int COORD_IF_getNodeAttrVal(const uint16_t shortAddr, 
+                            const uint32_t attrId)
 {
-  int rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_GET_RADIO_BAUD_RATE, NULL, 0x0);
-  if (rc != 1)
-    return 5;
+  int rc = 0;
+
+  Serial.printf("C_I_gCAV> A: %d\n", attrId); 
 
   return rc;
 }
 
-int GW_getRadioChannReqHndlr( )
+
+uint8_t COORD_IF_rcvdRespHdr[UART_FRAME_HDR_LEN];
+
+
+int COORD_IF_getCoordAttrVal(const int attrId)
 {
-  int rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_GET_NWK_CHANNEL, NULL, 0x0);
-  if (rc != 1)
-    return 5;
-  else
-    Serial.printf("\nRequest Sent...");
-  return rc;
-}
+  int rc = 0;
+  uint8_t pyldBuff[DIS_ATTR_ID_FIELD_SZ];
 
-void GW_procImageAttrVal(unsigned int attrId, unsigned char *buff2_p)
-{
-   switch (attrId)
-   {
-      case FU_IMAGE_STORE_IMAGE_FLAGS_ATTR_ID:
-           {
-              if (buff2_p[0] == 0x0)
-                  Serial.printf("No storage for images on this node !! \n");
-              else
-              {
-                  int idx;
-                  Serial.printf("AttrVal: 0x%x 0x%x 0x%x 0x%x\n",
-                         buff2_p[0], buff2_p[1],
-                         buff2_p[2], buff2_p[3]);
-                  for (idx=0; idx<7; idx++)
-                  {
-                       if (!(buff2_p[0] & (1 << idx)))
-                           continue;
-                       Serial.printf("Image #%d : %s    %s    %s\n",
-                              idx + 1, (buff2_p[1] & (1 << idx)) ? "Valid  " : "Invalid",
-                              (buff2_p[2] & (1 << idx)) ? "Active    " : "Not Active",
-                              (buff2_p[3] & (1 << idx)) ? "Update in Progress" : "       --");
-                  }
-              }
-           }
-           break;
-
-      case FU_IMAGE_STORE_IMAGE_1_IMAGE_RCVD_TIME_STAMP_ATTR_ID:
-      case FU_IMAGE_STORE_IMAGE_2_IMAGE_RCVD_TIME_STAMP_ATTR_ID:
-           {
-              char timeBuff[32];
-              unsigned int timeStamp = UTIL_ntohl(buff2_p);
-
-              ctime_r((time_t *)&timeStamp, timeBuff);
-
-              Serial.printf("AttrVal: %s", timeBuff);
-           }
-           break;
-
-      default:
-           {
-              Serial.printf("AttrVal<%u> \n", UTIL_ntohl(buff2_p));
-           }
-           break;
-   }
-
-   return;
-}
-
-
-int GW_cfgNodeDataPushInterval(unsigned int shortAddr, unsigned int pi)
-{
-   int rc, pyldLen, off = 0;
-   unsigned char *pyld_p;
-
-   pyldLen = LPWMN_MAC_SHORT_ADDR_LEN
-             + DIS_MSG_TYPE_SZ
-             + DIS_TLV_HDR_SZ   // DIS_TLV_TYPE_PUSH_INTERVAL
-             + LPWMN_GW_MSG_NODE_DATA_PUSH_INTERVAL_FIELD_LEN;
-
-   pyld_p = (unsigned char *)malloc(pyldLen);
-   if (pyld_p == NULL)
-   {
-       printf("malloc(%d) failed !! \n", pyldLen);
-       return 1;
-   }
-
-   UTIL_htons(pyld_p, shortAddr);
-   off = LPWMN_MAC_SHORT_ADDR_LEN;
-   pyld_p[off ++] = DIS_MSG_TYPE_CFG_NODE_DATA_PUSH_INTERVAL;
-   pyld_p[off ++] = DIS_TLV_TYPE_PUSH_INTERVAL;
-   pyld_p[off ++] = LPWMN_GW_MSG_NODE_DATA_PUSH_INTERVAL_FIELD_LEN;
-   UTIL_htons(pyld_p + off, pi);
-
-   rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_RELAY_TO_NODE,
-                        pyld_p, pyldLen);
-   if (rc != 1)
-      return rc;
-   if (rc == 1)
-   {
-      Serial.printf("Header Packet Sent, Waiting for Ack Response from Coord !! \n");
-   }  
-   Serial.printf("HdrACkSts before Ack <%d> \n", hdrAckSts);
-   if (xQueueReceive(Q5Hndl, (void *)&hdrAckSts, (portTickType)100))
-   {
-      if (hdrAckSts == 1)
-      {
-          Serial.printf("Hdr acked <%s> !! \n", __FUNCTION__);
-          for (int i_a = 0; i_a < pyldLen; i_a++)
-          {
-              Serial.printf("%x ", pyld_p[i_a]);
-          }
-          rc = UTIL_writeToUART(pyld_p, pyldLen);
-          if (rc != 1)
-          {
-              Serial.printf("<%s> UTIL_writeToUART(%d) failed !! \n",
-                            __FUNCTION__, pyldLen);
-              return 3;
-          }
-          else
-          {
-              Serial.printf("Payload Request Send <%s> !! \n", __FUNCTION__);
-          }
-        }
-        if (hdrAckSts == 0)
-        {
-            Serial.printf("Header not acked <%s> !! \n", __FUNCTION__);
-            return 2;
-        }
-        hdrAckSts = 0;
-      }
-
-   Serial.printf("Request sent ...<%s> !! \n", __FUNCTION__);
-
-   return rc;
-}
-
-int GW_getNodeAttrVal(unsigned int shortAddr, unsigned int attrId)
-{
-   int rc, pyldLen, off = 0;
-   unsigned char *pyld_p;
-
-   pyldLen = LPWMN_MAC_SHORT_ADDR_LEN
-             + DIS_MSG_TYPE_SZ
-             + DIS_ATTR_ID_TLV_SZ;
-
-   pyld_p = (unsigned char *)malloc(pyldLen);
-   if (pyld_p == NULL)
-   {
-       Serial.printf("malloc(%d) failed !! \n", pyldLen);
-       return 1;
-   }
-
-   UTIL_htons(pyld_p, shortAddr);
-   off = LPWMN_MAC_SHORT_ADDR_LEN;
-   pyld_p[off ++] = DIS_MSG_TYPE_GET_ATTR_VAL;
-   pyld_p[off ++] = DIS_TLV_TYPE_ATTR_ID;
-   pyld_p[off ++] = DIS_ATTR_ID_FIELD_SZ;
-   UTIL_htons(pyld_p + off, attrId);
-
-   rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_RELAY_TO_NODE,
-                        pyld_p, pyldLen);
-   if (rc != 1)
-      return rc;
-   if (rc == 1)
-   {
-      Serial.printf("Header Packet Sent, Waiting for Ack Response from Coord !! \n");
-   }  
-   Serial.printf("HdrACkSts before Ack <%d> \n", hdrAckSts);
-   if (xQueueReceive(Q5Hndl, (void *)&hdrAckSts, (portTickType)100))
-   {
-      if (hdrAckSts == 1)
-      {
-          Serial.printf("Hdr acked <%s> !! \n", __FUNCTION__);
-          for (int i_a = 0; i_a < pyldLen; i_a++)
-          {
-              Serial.printf("%x ", pyld_p[i_a]);
-          }
-          rc = UTIL_writeToUART(pyld_p, pyldLen);
-          if (rc != 1)
-          {
-              Serial.printf("<%s> UTIL_writeToUART(%d) failed !! \n",
-                            __FUNCTION__, pyldLen);
-              return 3;
-          }
-          else
-          {
-              Serial.printf("Payload Request Send <%s> !! \n", __FUNCTION__);
-          }
-        }
-        if (hdrAckSts == 0)
-        {
-            Serial.printf("Header not acked <%s> !! \n", __FUNCTION__);
-            return 2;
-        }
-        hdrAckSts = 0;
-      }
-      Serial.printf("Request sent. Waiting for response from Node ..... \n");
-      expDisMsgType = DIS_MSG_TYPE_GET_ATTR_VAL;
-      expDisMsgSrcShortAddr = shortAddr;
-      
-      return rc;
-}
-
-int GW_getCoordAttrVal(unsigned int attrId)
-{
-  int rc, pyldLen, off = 0;
-  unsigned char *pyld_p;
-
-  pyldLen = DIS_ATTR_ID_FIELD_SZ;
-
-  pyld_p = (unsigned char *)malloc(pyldLen);
-  if (pyld_p == NULL)
-  {
-    printf("malloc(%d) failed !! \n", pyldLen);
-    return 1;
-  }
-
-  UTIL_htons(pyld_p, attrId);
+  Serial.printf("C_I_gCAV> A: %d\n", attrId); 
+  
+  UTIL_htons(pyldBuff, attrId);
 
   GW_coordPendingAttrId = attrId;
 
-  rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_GET_COORD_ATTR_VAL,
-                       pyld_p, pyldLen);
+  rc = COORD_IF_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_GET_COORD_ATTR_VAL,
+                                    pyldBuff, DIS_ATTR_ID_FIELD_SZ);
   if (rc != 1)
-    return rc;
-  if (rc == 1)
+      return rc;
+
+  Serial.printf("GW_gCAV> Hdr Sent, W F Ack on Q5\n");
+  
+  if (xQueueReceive(Q5Hndl, (void *)COORD_IF_rcvdRespHdr, (portTickType)100))
   {
-    Serial.printf("Header Packet Sent, Waiting for Ack Response from Coord !! \n");
+      
+      {
+          Serial.printf("GW_gCAV> H Ackd \n");
+         
+          rc = UTIL_writeToUART(pyldBuff, DIS_ATTR_ID_FIELD_SZ);
+          if (rc != 1)
+          {
+              Serial.printf("GW_gCAV> U Wr(%d b) Flr!! \n", DIS_ATTR_ID_FIELD_SZ);
+              return 3;
+          }
+          else
+          {
+              Serial.printf("GW_gCAV> Pyld Req Sent\n");
+          }
+      }
   }
   
-  Serial.printf("HdrACkSts before Ack <%d> \n", hdrAckSts);
-  if (xQueueReceive(Q5Hndl, (void *)&hdrAckSts, (portTickType)100))
-  {
-    if (hdrAckSts == 1)
-    {
-      Serial.printf("Hdr acked <%s> !! \n", __FUNCTION__);
-      for (int i_a = 0; i_a < pyldLen; i_a++)
-      {
-        Serial.printf("%x ", pyld_p[i_a]);
-      }
-      rc = UTIL_writeToUART(pyld_p, pyldLen);
-      if (rc != 1)
-      {
-        Serial.printf("<%s> UTIL_writeToUART(%d) failed !! \n",
-                      __FUNCTION__, pyldLen);
-        return 3;
-      }
-      else
-      {
-        Serial.printf("Payload Request Send <%s> !! \n", __FUNCTION__);
-      }
-    }
-    if (hdrAckSts == 0)
-    {
-      Serial.printf("Header not acked <%s> !! \n", __FUNCTION__);
-      return 2;
-    }
-    hdrAckSts = 0;
-  }
   return rc;
 }
+
+
 
 int GW_setNodeAttrVal(unsigned int shortAddr,
                       unsigned int attrId,
@@ -475,7 +281,7 @@ int GW_setNodeAttrVal(unsigned int shortAddr,
   }
   off += attrValLen;
 
-  rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_RELAY_TO_NODE,
+  rc = COORD_IF_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_RELAY_TO_NODE,
                        pyld_p, pyldLen);
   if (rc != 1)
     return rc;
@@ -647,7 +453,7 @@ int GW_setCoordAttrVal(unsigned int shortAddr,
     default:
       break;
   }
-  rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_SET_COORD_ATTR_VAL,
+  rc = COORD_IF_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_SET_COORD_ATTR_VAL,
                        pyld_p, pyldLen);
   if (rc != 1)
     return rc;
@@ -691,7 +497,7 @@ int GW_rebootCoordReq(void)
 {
   int rc;
 
-  rc = CoordIf_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_REBOOT_COORD, NULL, 0x0);
+  rc = COORD_IF_buildSendHdrToCoord(LPWMN_GW_MSG_TYPE_REBOOT_COORD, NULL, 0x0);
   if (rc != 1)
   {
     Serial.printf("failed !! \n");

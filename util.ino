@@ -1,3 +1,17 @@
+/*
+ *********************************************************************
+ * File: util.ino
+ * 
+ * Author: rkris@wisense.in / siva@wisense.in
+ * 
+ * Date: March/2021
+ * 
+ * Copyright (C) WiSense Technologies Pvt Ltd
+ * All rights reserved.
+ * *******************************************************************
+ */
+
+
 uint16_t UTIL_ntohs(const uint8_t *buff_p)
 {
   uint16_t  u16Val = *buff_p;
@@ -31,9 +45,11 @@ void UTIL_htonl(unsigned char *buff_p, unsigned int val)
   buff_p[3] = (val) & 0xff;
 }
 
-uint16_t COORD_INTF_calcCkSum16(uint8_t *buff_p, uint8_t len)
+uint16_t COORD_IF_calcCkSum16(const uint8_t *buff_p, 
+                                const int buffLen)
 {
   uint32_t ckSum = 0;
+  int len = buffLen;
 
   while (len > 1)
   {
