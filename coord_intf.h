@@ -12,6 +12,8 @@
 #ifndef __COORD_INTF_ENA__
 #define __COORD_INTF_ENA__
 
+#define WSN_SHORT_BROADCAST_ADDR  0xffff
+
 #define COORD_INTF_STS_SUCCESS         0x0
 #define COORD_INTF_STS_DEV_BUSY        0x1
 #define COORD_INTF_STS_HW_TX_ERR       0x2
